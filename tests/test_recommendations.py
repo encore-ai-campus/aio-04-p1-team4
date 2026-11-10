@@ -1,4 +1,5 @@
 """게임·채팅이 같은 검색을 사용하는지 외부 호출 없이 API 경계에서 검증합니다."""
+import json
 import unittest
 from datetime import time
 from tempfile import TemporaryDirectory
@@ -40,7 +41,8 @@ class RecommendationTests(unittest.TestCase):
         )
         self.collect_details = self.collection_patcher.start()
 
-        async def store_details(database, restaurant_ids, *, limit=3):
+        async def store_details(database, restaurant_ids, *, limit=3, **_options):
+            # 수집 TTL과 스트리밍 콜백이 추가돼도 테스트 수집기의 핵심 동작만 검증한다.
             reports = []
             with database.session_factory.begin() as session:
                 for restaurant_id in restaurant_ids[:limit]:
@@ -76,6 +78,16 @@ class RecommendationTests(unittest.TestCase):
                             "hours_status": "success",
                         }
                     )
+                    progress = _options.get("progress")
+                    if progress is not None:
+                        await progress(
+                            {
+                                "event": "collecting",
+                                "message": f"식당 상세정보를 수집하고 있어요 ({len(reports)}/{min(limit, len(restaurant_ids))}).",
+                                "completed": len(reports),
+                                "total": min(limit, len(restaurant_ids)),
+                            }
+                        )
             return reports
 
         self.collect_details.side_effect = store_details
@@ -98,7 +110,8 @@ class RecommendationTests(unittest.TestCase):
         self.assertEqual(result["restaurants"][0]["price"], 8000)
         self.assertTrue(result["restaurants"][0]["menu_verified"])
         self.assertFalse(result["constraints_verified"])
-        self.assertTrue(result["menu_catalog_demo"])
+        # 5단계부터 고정 배열이 아니라 SQLAlchemy 메뉴 카탈로그를 사용한다.
+        self.assertFalse(result["menu_catalog_demo"])
         self.assertTrue(result["has_more"])
 
     def test_search_result_is_saved_and_reports_count(self):
@@ -201,4 +214,198 @@ class RecommendationTests(unittest.TestCase):
         response=self.client.post("/api/chat",json={**BODY,"message":"추천"})
         self.assertEqual(response.status_code,503)
         self.assertEqual(response.headers["X-Error-Code"],"groq_rate_limit")
+        self.search.assert_not_awaited()
+
+    def test_clarification_is_saved_as_pending_and_normal_request_clears_it(self):
+        # 값 없는 반경 변경은 세션의 대화 pending으로 저장하며 수집 pending과 섞지 않는다.
+        self.interpret.return_value = QuestionInterpretation(
+            intent="clarify", clarification_kind="radius"
+        )
+        response = self.client.post(
+            "/api/chat", json={**BODY, "message": "반경을 줄여줘"}
+        )
+        self.assertEqual(response.status_code, 200)
+        saved = self.client.get("/api/chat/session").json()
+        self.assertEqual(saved["pending_action"]["kind"], "change_radius")
+        self.assertEqual(saved["pending_action"]["current_value"], 500)
+
+        # 다음 정상 추천 요청이 성공하면 이전 확인 대기를 해제한다.
+        self.interpret.return_value = QuestionInterpretation(intent="recommend_menu")
+        response = self.client.post(
+            "/api/chat", json={**BODY, "message": "그냥 추천해줘"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self.client.get("/api/chat/session").json()["pending_action"])
+
+    def test_reroll_does_not_select_current_menu(self):
+        self.interpret.return_value = QuestionInterpretation(intent="reroll_menu")
+        response = self.client.post(
+            "/api/chat", json={**BODY, "message": "다른 메뉴 추천해줘"}
+        )
+        self.assertEqual(response.status_code, 200)
+        selected = response.json()["result"]["menu"]
+        self.assertIsNotNone(selected)
+        self.assertNotEqual(selected["id"], "noodle")
+        # 메뉴만 다시 고르는 질문은 상세페이지 수집이나 카카오 검색을 시작하지 않는다.
+        self.search.assert_not_awaited()
+
+    def test_menu_recommendation_uses_database_catalog_without_search(self):
+        self.interpret.return_value = QuestionInterpretation(intent="recommend_menu")
+        response = self.client.post(
+            "/api/chat", json={**BODY, "menu_id": None, "message": "메뉴 추천해줘"}
+        )
+        self.assertEqual(response.status_code, 200)
+        result = response.json()["result"]
+        self.assertIsNotNone(result["menu"])
+        self.assertFalse(result["menu_catalog_demo"])
+        self.assertIn(result["menu"]["source"], {"database", "catalog"})
+        self.search.assert_not_awaited()
+
+    def test_restaurant_price_followup_reads_saved_database(self):
+        # 첫 질문으로 추천 식당 ID와 상세페이지에서 확인한 가격을 세션에 저장한다.
+        first = self.client.post(
+            "/api/chat", json={**BODY, "message": "짜장면 식당 보여줘"}
+        )
+        self.assertEqual(first.status_code, 200)
+        self.interpret.return_value = QuestionInterpretation.model_validate(
+            {
+                "intent": "ask_restaurant_detail",
+                "restaurant_id": "test-place",
+                "requested_detail": "price",
+            },
+            context={"menu_ids": {"noodle"}, "restaurant_ids": {"test-place"}},
+        )
+
+        response = self.client.post(
+            "/api/chat", json={**BODY, "message": "그 식당 가격은?"}
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("8,000원", payload["text"])
+        self.assertEqual(payload["restaurant_detail"]["price"], 8000)
+        # 후속 질문은 저장 DB만 읽으므로 카카오 검색은 최초 한 번뿐이다.
+        self.search.assert_awaited_once()
+
+    def test_restaurant_hours_followup_calculates_current_korea_time(self):
+        self.client.post(
+            "/api/chat", json={**BODY, "message": "짜장면 식당 보여줘"}
+        )
+        self.interpret.return_value = QuestionInterpretation.model_validate(
+            {
+                "intent": "ask_restaurant_detail",
+                "restaurant_id": "test-place",
+                "requested_detail": "hours",
+            },
+            context={"menu_ids": {"noodle"}, "restaurant_ids": {"test-place"}},
+        )
+        response = self.client.post(
+            "/api/chat", json={**BODY, "message": "지금 영업 중이야?"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("현재 한국 시간", response.json()["text"])
+        self.assertEqual(response.json()["restaurant_detail"]["open_status"], "open")
+
+    def test_restaurant_missing_price_is_not_invented(self):
+        self.client.post(
+            "/api/chat", json={**BODY, "message": "짜장면 식당 보여줘"}
+        )
+        # 기존 수집 가격을 미확인 상태로 바꿔도 챗봇이 임의 가격을 만들면 안 된다.
+        with self.test_database.session_factory.begin() as session:
+            restaurant = session.get(Restaurant, "test-place")
+            restaurant.menus[0].price = None
+            restaurant.menus[0].price_status = "missing"
+        self.interpret.return_value = QuestionInterpretation.model_validate(
+            {
+                "intent": "ask_restaurant_detail",
+                "restaurant_id": "test-place",
+                "requested_detail": "price",
+            },
+            context={"menu_ids": {"noodle"}, "restaurant_ids": {"test-place"}},
+        )
+        response = self.client.post(
+            "/api/chat", json={**BODY, "message": "가격 알려줘"}
+        )
+        self.assertIn("가격 확인 불가", response.json()["text"])
+        self.assertNotIn("price", response.json()["restaurant_detail"])
+
+    def test_restaurant_address_menu_and_reason_followups_use_database(self):
+        self.search.return_value = {
+            "items": [{**ITEM, "address": "서울 테스트로 1"}],
+            "has_more": False,
+        }
+        self.client.post(
+            "/api/chat", json={**BODY, "message": "짜장면 식당 보여줘"}
+        )
+        checks = {
+            "address": "서울 테스트로 1",
+            "menu": "짜장면",
+            "reason": "판매가 확인됨",
+        }
+        for requested_detail, expected in checks.items():
+            self.interpret.return_value = QuestionInterpretation.model_validate(
+                {
+                    "intent": "ask_restaurant_detail",
+                    "restaurant_id": "test-place",
+                    "requested_detail": requested_detail,
+                },
+                context={
+                    "menu_ids": {"noodle"},
+                    "restaurant_ids": {"test-place"},
+                },
+            )
+            response = self.client.post(
+                "/api/chat", json={**BODY, "message": f"{requested_detail} 알려줘"}
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(expected, response.json()["text"])
+        self.search.assert_awaited_once()
+
+    def test_chat_stream_reports_progress_and_completed_result(self):
+        # 실제 외부 호출 없이도 브라우저가 받는 JSON Lines 이벤트 순서를 검증한다.
+        with self.client.stream(
+            "POST",
+            "/api/chat/stream",
+            json={**BODY, "message": "짜장면 식당 보여줘"},
+        ) as response:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("application/x-ndjson", response.headers["content-type"])
+            events = [json.loads(line) for line in response.iter_lines() if line]
+
+        names = [event["event"] for event in events]
+        self.assertEqual(names[0], "started")
+        self.assertIn("interpreting", names)
+        self.assertIn("checking_database", names)
+        self.assertIn("searching", names)
+        self.assertIn("collecting", names)
+        self.assertIn("filtering", names)
+        self.assertEqual(names[-1], "completed")
+        self.assertEqual(events[-1]["data"]["result"]["restaurants"][0]["id"], "test-place")
+
+    def test_chat_stream_rejects_duplicate_session_request(self):
+        # 스트림이 처리 중인 것으로 등록된 같은 쿠키 세션은 외부 호출 전에 거부한다.
+        self.client.get("/api/chat/session")
+        session_id = self.client.cookies.get("lunchrun_session")
+        app.state.active_chat_streams.add(session_id)
+        try:
+            response = self.client.post(
+                "/api/chat/stream",
+                json={**BODY, "message": "식당 다시 보여줘"},
+            )
+            self.assertEqual(response.status_code, 409)
+            self.assertIn("이미 처리 중", response.json()["detail"])
+            self.search.assert_not_awaited()
+        finally:
+            app.state.active_chat_streams.discard(session_id)
+
+    def test_chat_stream_returns_safe_failure_event(self):
+        self.interpret.side_effect = GroqError(
+            "groq_rate_limit", "잠시 후 다시 시도해 주세요.", 503
+        )
+        with self.client.stream(
+            "POST", "/api/chat/stream", json={**BODY, "message": "추천해줘"}
+        ) as response:
+            events = [json.loads(line) for line in response.iter_lines() if line]
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(events[-1]["event"], "failed")
+        self.assertEqual(events[-1]["code"], "groq_rate_limit")
         self.search.assert_not_awaited()

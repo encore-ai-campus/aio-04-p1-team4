@@ -4,7 +4,7 @@ const vm=require('node:vm');const fs=require('node:fs');const path=require('node
 const source=fs.readFileSync(path.join(__dirname,'../frontend/app.js'),'utf8').replace(/\nrender\(\);\s*$/,'');
 function setup(fetch){
   // 화면 함수만 실행하며 브라우저 권한·네트워크·실제 위치를 사용하지 않습니다.
-  const context=vm.createContext({clearInterval,clearTimeout,document:{querySelector:()=>({addEventListener(){}}),querySelectorAll:()=>[],addEventListener(){}},window:{addEventListener(){}},localStorage:{getItem:()=>null},location:{hash:'#game'},AbortSignal,fetch,LunchRunLocation:{validCoordinates:()=>true}});
+  const context=vm.createContext({clearInterval,clearTimeout,setTimeout,AbortController,AbortSignal,TextDecoder,Uint8Array,document:{querySelector:()=>({addEventListener(){}}),querySelectorAll:()=>[],addEventListener(){}},window:{addEventListener(){}},localStorage:{getItem:()=>null},location:{hash:'#game'},fetch,LunchRunLocation:{validCoordinates:()=>true}});
   vm.runInContext(source,context);vm.runInContext('render=()=>{};toast=()=>{};state.location={lat:37.48,lng:126.88,name:"예시",source:"place"};',context);
   return code=>vm.runInContext(code,context);
 }
@@ -96,4 +96,39 @@ test('채팅 실패 뒤에도 이전 추첨은 재개되지 않음',async()=>{
   assert.equal(run('state.spinning'),false);
   assert.equal(run('state.result'),null);
   assert.match(run('state.messages.at(-1).text'),/재시도/);
+});
+
+test('JSON Lines 스트림의 진행 이벤트와 최종 결과를 순서대로 해석함',async()=>{
+  const chunks=[
+    new TextEncoder().encode('{"event":"interpreting","message":"질문 해석 중"}\n{"event":"collect'),
+    new TextEncoder().encode('ing","message":"수집 중 1/1"}\n{"event":"completed","data":{"text":"완료"}}\n'),
+  ];
+  const fetch=async()=>({ok:true,body:{getReader:()=>({read:async()=>chunks.length?{done:false,value:chunks.shift()}:{done:true}})}});
+  const run=setup(fetch);
+  await run('(async()=>{globalThis.events=[];await streamChat({},event=>events.push(event),new AbortController().signal)})()');
+  assert.deepEqual([...run('events.map(event=>event.event)')],['interpreting','collecting','completed']);
+  assert.equal(run('events[1].message'),'수집 중 1/1');
+});
+
+test('처리 중 메시지에는 스피너가 표시되고 취소 시 AbortSignal이 중단됨',()=>{
+  const run=setup();
+  run('state.messages=[{role:"user",text:"추천"}];state.busy=true;state.chatProgress="상세정보 수집 중";state.chatController=new AbortController();');
+  assert.ok(run('chatMessages()').includes('progress-spinner'));
+  run('cancelChatRequest()');
+  assert.equal(run('state.chatController'),null);
+  assert.equal(run('state.chatProgress'),'');
+});
+
+test('완료 이벤트의 결과만 현재 추천과 채팅 답변에 적용함',async()=>{
+  const lines=[
+    {event:'started',message:'요청 시작'},
+    {event:'filtering',message:'조건 확인 중'},
+    {event:'completed',data:{text:'DB 추천 완료',suggested_patch:null,result:{menu:{id:'noodle',name:'짜장면'},restaurants:[]}}},
+  ].map(value=>JSON.stringify(value)).join('\n')+'\n';
+  const run=setup(async()=>({ok:true,body:null,text:async()=>lines}));
+  await run('sendChat("추천해줘")');
+  assert.equal(run('state.result.menu.id'),'noodle');
+  assert.equal(run('state.messages.at(-1).text'),'DB 추천 완료');
+  assert.equal(run('state.busy'),false);
+  assert.equal(run('state.chatProgress'),'');
 });

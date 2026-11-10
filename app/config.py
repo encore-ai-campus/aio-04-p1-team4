@@ -22,6 +22,17 @@ class Settings(BaseModel):
     groq_model: str = Field(default="openai/gpt-oss-20b", min_length=1)
     groq_timeout_seconds: float = Field(default=30, gt=0, le=120, allow_inf_nan=False)
     groq_max_completion_tokens: int = Field(default=1024, ge=128, le=8192)
+    # 현재는 메모리 세션이며 쿠키 수명과 메모리 만료시간에 같은 값을 사용한다.
+    chat_session_ttl_seconds: int = Field(default=86400, ge=60, le=604800)
+    # 상세정보는 정상 결과와 실패 결과의 재시도 주기를 분리해 불필요한 브라우저 수집을 줄인다.
+    detail_success_ttl_hours: int = Field(default=168, ge=1, le=720)
+    detail_failure_retry_minutes: int = Field(default=60, ge=1, le=1440)
+    # Redis 도입 전 단일 프로세스에서 세션별 채팅 과다 요청을 제한한다.
+    chat_requests_per_minute: int = Field(default=10, ge=1, le=120)
+    chat_requests_per_day: int = Field(default=100, ge=1, le=10000)
+    max_request_bytes: int = Field(default=65536, ge=1024, le=1048576)
+    # 로컬 HTTP는 False, HTTPS 배포 환경은 True로 설정한다.
+    cookie_secure: bool = False
     # 3단계에서는 SQLite를 기본값으로 사용하고, 추후 DATABASE_URL만 바꿔 PostgreSQL로 전환한다.
     database_url: str = Field(default=DEFAULT_DATABASE_URL, min_length=1)
 
@@ -45,5 +56,14 @@ def load_settings() -> Settings:
         groq_model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b").strip(),
         groq_timeout_seconds=os.environ.get("GROQ_TIMEOUT_SECONDS", "30"),
         groq_max_completion_tokens=os.environ.get("GROQ_MAX_COMPLETION_TOKENS", "1024"),
+        chat_session_ttl_seconds=os.environ.get("CHAT_SESSION_TTL_SECONDS", "86400"),
+        detail_success_ttl_hours=os.environ.get("DETAIL_SUCCESS_TTL_HOURS", "168"),
+        detail_failure_retry_minutes=os.environ.get(
+            "DETAIL_FAILURE_RETRY_MINUTES", "60"
+        ),
+        chat_requests_per_minute=os.environ.get("CHAT_REQUESTS_PER_MINUTE", "10"),
+        chat_requests_per_day=os.environ.get("CHAT_REQUESTS_PER_DAY", "100"),
+        max_request_bytes=os.environ.get("MAX_REQUEST_BYTES", "65536"),
+        cookie_secure=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
         database_url=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL).strip(),
     )

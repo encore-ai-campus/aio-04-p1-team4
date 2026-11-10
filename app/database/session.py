@@ -60,9 +60,14 @@ class Database:
         )
 
     def init_schema(self) -> None:
-        """로컬 프로토타입에서 아직 없는 테이블만 생성한다."""
+        """누락 테이블을 만들고 기본 메뉴 카탈로그를 중복 없이 준비한다."""
 
         Base.metadata.create_all(bind=self.engine)
+        # import를 함수 안에서 수행해 모델 로딩 중 순환 참조를 피한다.
+        from .seed import seed_menu_catalog
+
+        with self.session_factory.begin() as session:
+            seed_menu_catalog(session)
 
     def dispose(self) -> None:
         self.engine.dispose()

@@ -74,3 +74,4 @@ footer{max-width:1200px;margin:0 auto;padding:24px 0 34px;border-top:1px solid v
 .groq-status-time{font-size:9px;color:#72786f}.groq-connection .button{flex-shrink:0}
 .ai-connection-summary[data-status="connected"]{color:#287546}.ai-connection-summary[data-status="disconnected"]{color:#b53636}.ai-connection-summary[data-status="unknown"]{color:#aa6515}
 @media(max-width:740px){.groq-connection{align-items:flex-start;flex-direction:column;padding:12px 15px}.groq-connection .button{align-self:flex-end}}
+.progress-message p{color:#69745e}.progress-spinner{display:block;width:12px;height:12px;border:2px solid #c9d2bd;border-top-color:#6f865b;border-radius:50%;animation:chat-spin .8s linear infinite}@keyframes chat-spin{to{transform:rotate(360deg)}}

@@ -62,8 +62,21 @@ class GroqClient:
         self._settings = settings
         self._transport = transport
 
-    async def interpret(self, message: str, conditions: Conditions, radius_m: int,
-                        menus: list[dict], selected_menu_id: str | None = None) -> QuestionInterpretation:
+    async def interpret(
+        self,
+        message: str,
+        conditions: Conditions,
+        radius_m: int,
+        menus: list[dict],
+        selected_menu_id: str | None = None,
+        *,
+        conversation_history: list[dict] | None = None,
+        restaurants: list[dict] | None = None,
+        candidate_restaurants: list[dict] | None = None,
+        pending_action: dict | None = None,
+    ) -> QuestionInterpretation:
+        """최근 세션 문맥을 포함해 안전한 실행 계획 하나를 반환한다."""
+
         key = self._settings.groq_api_key.get_secret_value().strip()
         if not key:
             raise GroqError("groq_config", "Groq API 키가 설정되지 않았습니다. 서버 설정을 확인해 주세요.", 503)
@@ -73,10 +86,25 @@ class GroqClient:
         if type(radius_m) is not int or not 50 <= radius_m <= 500:
             raise ValueError("반경은 50~500m 정수여야 합니다.")
         menu_ids = {m["id"] for m in menus}
+        restaurant_ids = {
+            item["id"]
+            for item in [*(restaurants or []), *(candidate_restaurants or [])]
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        }
         if selected_menu_id is not None and selected_menu_id not in menu_ids:
             raise ValueError("선택 메뉴가 메뉴 목록에 없습니다.")
         try:
-            messages = build_interpretation_messages(message.strip(), conditions.model_dump(), radius_m, menus, selected_menu_id)
+            messages = build_interpretation_messages(
+                message.strip(),
+                conditions.model_dump(),
+                radius_m,
+                menus,
+                selected_menu_id,
+                conversation_history=conversation_history,
+                restaurants=restaurants,
+                candidate_restaurants=candidate_restaurants,
+                pending_action=pending_action,
+            )
         except (OSError, ValueError, KeyError, TypeError):
             raise GroqError("groq_policy", "질문 해석 지침 파일을 확인해 주세요.", 503) from None
         body = {"model": self._settings.groq_model, "messages": messages,
@@ -85,18 +113,7 @@ class GroqClient:
         # GPT-OSS는 짧은 해석 작업에 낮은 추론 강도를 사용하고 추론 텍스트를 반환하지 않습니다.
         if self._settings.groq_model.startswith("openai/gpt-oss-"):
             body.update(reasoning_effort="low", include_reasoning=False)
-        try:
-            # 개별 통신 대기와 전체 요청 모두 제한하며 자동 재시도·리다이렉트는 하지 않습니다.
-            async with asyncio.timeout(self._settings.groq_timeout_seconds):
-                async with httpx.AsyncClient(timeout=self._settings.groq_timeout_seconds,
-                                             follow_redirects=False, transport=self._transport) as client:
-                    response = await client.post(self.URL, json=body,
-                                                 headers={"Authorization": f"Bearer {key}"})
-        except (TimeoutError, httpx.TimeoutException):
-            raise GroqError("groq_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.", 504) from None
-        except httpx.RequestError:
-            raise GroqError("groq_connection", "AI 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", 503) from None
-        # 서버 키의 인증 실패를 사용자 로그인 실패(401)와 혼동하지 않도록 503으로 반환합니다.
+        # 인증·한도·요청 오류는 형식 재요청 대상이 아니므로 즉시 안전한 오류로 반환한다.
         errors = {
             401: ("groq_auth", "Groq API 키 인증에 실패했습니다. 서버 설정을 확인해 주세요.", 503),
             403: ("groq_permission", "해당 Groq 모델의 사용 권한을 확인해 주세요.", 503),
@@ -104,21 +121,76 @@ class GroqClient:
             400: ("groq_request", "Groq 모델과 요청 옵션을 확인해 주세요.", 502),
             404: ("groq_model", "Groq 모델 이름과 사용 가능 여부를 확인해 주세요.", 503),
         }
-        if response.status_code in errors:
-            raise GroqError(*errors[response.status_code])
-        if response.status_code != 200:
-            raise GroqError("groq_upstream", "AI 서비스가 정상 응답하지 않았습니다.")
         try:
-            data = response.json()
-            choice = data["choices"][0]
-            if choice.get("finish_reason") == "length":
-                raise GroqError("groq_truncated", "AI 출력 한도에 도달해 응답이 잘렸습니다. 서버의 출력 토큰 설정을 확인해 주세요.")
-            if choice.get("finish_reason") != "stop":
-                raise ValueError("Incomplete response")
-            result = choice["message"]
-            if result.get("tool_calls") or result.get("refusal"):
-                raise ValueError("Unsupported response")
-            # JSON 모드만으로 의미·범위가 보장되지 않으므로 Pydantic 검증을 반드시 거칩니다.
-            return parse_interpretation(result["content"], menu_ids)
-        except (ValidationError, ValueError, KeyError, IndexError, TypeError, AttributeError):
-            raise GroqError("groq_response", "AI 응답을 안전하게 해석하지 못했습니다. 다시 질문해 주세요.") from None
+            # 두 요청을 합친 전체 제한시간 안에서 형식 오류만 한 번 다시 요청한다.
+            async with asyncio.timeout(self._settings.groq_timeout_seconds):
+                async with httpx.AsyncClient(
+                    timeout=self._settings.groq_timeout_seconds,
+                    follow_redirects=False,
+                    transport=self._transport,
+                ) as client:
+                    for attempt in range(2):
+                        response = await client.post(
+                            self.URL,
+                            json=body,
+                            headers={"Authorization": f"Bearer {key}"},
+                        )
+                        if response.status_code in errors:
+                            raise GroqError(*errors[response.status_code])
+                        if response.status_code != 200:
+                            raise GroqError(
+                                "groq_upstream", "AI 서비스가 정상 응답하지 않았습니다."
+                            )
+                        try:
+                            data = response.json()
+                            choice = data["choices"][0]
+                            if choice.get("finish_reason") == "length":
+                                raise GroqError(
+                                    "groq_truncated",
+                                    "AI 출력 한도에 도달해 응답이 잘렸습니다. 서버의 출력 토큰 설정을 확인해 주세요.",
+                                )
+                            if choice.get("finish_reason") != "stop":
+                                raise ValueError("Incomplete response")
+                            result = choice["message"]
+                            if result.get("tool_calls") or result.get("refusal"):
+                                raise ValueError("Unsupported response")
+                            return parse_interpretation(
+                                result["content"], menu_ids, restaurant_ids
+                            )
+                        except GroqError:
+                            raise
+                        except (
+                            ValidationError,
+                            ValueError,
+                            KeyError,
+                            IndexError,
+                            TypeError,
+                            AttributeError,
+                        ):
+                            if attempt == 0:
+                                # 잘못된 원문은 다시 넣지 않고 같은 질문에 스키마 준수만 재강조한다.
+                                body = {
+                                    **body,
+                                    "messages": [
+                                        *messages,
+                                        {
+                                            "role": "user",
+                                            "content": "이전 출력은 JSON Schema 검증에 실패했습니다. 같은 입력을 Schema에 맞는 JSON 객체 하나로 다시 해석하세요.",
+                                        },
+                                    ],
+                                }
+                                continue
+                            # 두 번째 형식 오류도 검색으로 실행하지 않고 안전한 확인 상태로 낮춘다.
+                            return QuestionInterpretation(
+                                intent="clarify", clarification_kind="ambiguous"
+                            )
+        except GroqError:
+            raise
+        except (TimeoutError, httpx.TimeoutException):
+            raise GroqError(
+                "groq_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.", 504
+            ) from None
+        except httpx.RequestError:
+            raise GroqError(
+                "groq_connection", "AI 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", 503
+            ) from None

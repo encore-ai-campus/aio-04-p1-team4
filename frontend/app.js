@@ -1,18 +1,19 @@
-/* 위치와 식당 후보는 실제 카카오 검색을 사용합니다. 질문 해석은 Groq를 사용하며 메뉴 분류·인증은 데모입니다. */
+/* 위치·식당은 카카오, 질문 해석은 Groq, 메뉴·상세정보는 DB를 사용합니다. 인증은 아직 데모입니다. */
 const $ = (s, root = document) => root.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const defaults = () => ({ minutes: 45, budget: 12000, cuisine: '전체', diet: 'any', spicy: true });
 // 위치는 실제 조회 결과만 저장합니다. 반경은 다음 식당 검색 연결을 위한 요청값입니다.
 const locationSearch = { kind: 'place', query: '', items: [], error: '', busy: false, token: 0, controller: null, timer: null };
 // 위치 반경은 음식 조건과 별도로 관리하며 기본값은 500m입니다.
-const state = { conditions: defaults(), radiusM: 500, location: null, user: null, prefs: {}, result: null, selected: null, cardPage: 0, mapPage: 0, busy: false, spinning: false, version: 0, messages: [], chatTurn: 0, gamePlayed: false };
+const state = { conditions: defaults(), radiusM: 500, location: null, user: null, prefs: {}, result: null, selected: null, cardPage: 0, mapPage: 0, busy: false, spinning: false, version: 0, messages: [], chatTurn: 0, chatProgress: '', chatController: null, gamePlayed: false };
 let toastTimer, spinTimer, spinFinish;
 try { state.prefs = JSON.parse(localStorage.getItem('lr-demo-preferences') || '{}'); } catch { state.prefs = {}; }
 // Each browser session starts as a guest. Demo membership is not authentication.
 function toast(message) { $('#toast').textContent = message; $('#toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.remove('show'), 3500); }
 function route() { return location.hash.slice(1) || 'home'; }
 function cancelSpin() { clearInterval(spinTimer); clearTimeout(spinFinish); state.spinning = false; }
-function invalidate() { state.version++; state.result = null; state.selected = null; state.cardPage = 0; state.mapPage = 0; state.gamePlayed = false; cancelSpin(); }
+function cancelChatRequest() { if(state.chatController){state.chatController.abort();state.chatController=null;} state.chatProgress=''; }
+function invalidate() { cancelChatRequest();state.version++; state.result = null; state.selected = null; state.cardPage = 0; state.mapPage = 0; state.gamePlayed = false; cancelSpin(); }
 function go(page) { if (route() === page) render(); else location.hash = page; }
 async function api(path, body) {
   const response = await fetch(`/api/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(path === 'chat' ? 45000 : 30000) });
@@ -22,6 +23,39 @@ async function api(path, body) {
     throw new Error(typeof data.detail==='string'?data.detail:response.status===422?'입력 범위를 확인해 주세요.':'요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.');
   }
   return response.json();
+}
+// POST 본문을 유지하면서 JSON Lines를 한 줄씩 해석해 서버 진행상태를 즉시 표시합니다.
+async function streamChat(body,onEvent,signal) {
+  const response=await fetch('/api/chat/stream',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/x-ndjson'},body:JSON.stringify(body),credentials:'same-origin',signal});
+  if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(typeof data.detail==='string'?data.detail:'채팅 요청을 처리하지 못했어요.');}
+  const consume=line=>{if(!line.trim())return;onEvent(JSON.parse(line));};
+  // 일부 테스트·구형 환경이 ReadableStream을 제공하지 않으면 완료 후 같은 형식을 한 번에 해석합니다.
+  if(!response.body?.getReader){for(const line of (await response.text()).split('\n'))consume(line);return;}
+  const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
+  while(true){const {done,value}=await reader.read();buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});const lines=buffer.split('\n');buffer=lines.pop()||'';for(const line of lines)consume(line);if(done)break;}
+  if(buffer.trim())consume(buffer);
+}
+// 같은 브라우저의 HttpOnly 세션 쿠키를 이용해 최근 10턴과 현재 조건을 복원합니다.
+async function restoreChatSession() {
+  const localVersion=state.version;
+  try {
+    const response=await fetch('/api/chat/session',{headers:{'Accept':'application/json'},credentials:'same-origin'});
+    if(!response.ok)return;
+    const saved=await response.json();
+    // 복원 요청 중 사용자가 조건이나 대화를 변경했다면 오래된 서버 응답을 덮어쓰지 않습니다.
+    if(!saved.exists||state.version!==localVersion||state.messages.length)return;
+    if(saved.conditions)state.conditions={...saved.conditions};
+    if(saved.location)state.location={...saved.location};
+    if(Number.isInteger(saved.radius_m))state.radiusM=saved.radius_m;
+    state.messages=(saved.turns||[]).flatMap(turn=>[
+      {role:'user',text:turn.user_message},
+      {role:'assistant',text:turn.assistant_message}
+    ]);
+    state.chatTurn=(saved.turns||[]).length;
+    // 식당 상세값은 세션에 복사하지 않고 메뉴 ID·표시값만 복원합니다.
+    if(saved.selected_menu)state.result={menu:saved.selected_menu,restaurants:[],candidate_restaurants:[],message:'이전 대화의 선정 메뉴를 복원했어요.',has_more:false};
+    render();
+  } catch { /* 메모리 세션 복원 실패는 새 대화 시작으로 처리합니다. */ }
 }
 // 추천/게임/채팅이 모두 같은 좌표·반경을 전송합니다. 설정 전에는 요청하지 않습니다.
 function payload(menu = false) {
@@ -111,9 +145,11 @@ function resultCards() {
   return `<p class="candidate-notice">${esc(state.result.message)}${state.result.has_more?' 현재 첫 검색 페이지 일부만 확인했습니다.':''}</p>${recommended}${needsCheck}`;
 }
 function chatMessages() {
-  // 질문 해석은 예시 방식이지만 식당 목록은 실제 카카오 검색으로 조회합니다.
-  if (!state.messages.length) return `<div class="chat-welcome"><span class="chat-symbol">✳</span><h3>오늘의 점심 메이트</h3><p>질문을 AI로 해석하고 조건에 맞는 예시 메뉴와 주변 식당 후보를 찾아요.<br>실제 매장의 음식 조건은 미확인입니다.</p></div>`;
-  return state.messages.map((m,i) => `<div class="message ${m.role}"><span class="message-avatar">${m.role==='user'?'나':'✳'}</span><div><p>${esc(m.text)}</p>${m.patch ? `<p class="patch-summary">${esc(patchSummary(m.patch))}</p>` : ''}${m.patch ? button('조건 변경 적용','apply-patch','button small secondary',`data-message="${i}" ${m.version!==state.version||m.turn!==state.chatTurn||state.busy?'disabled':''}`):''}${m.map && m.version===state.version ? `<div class="message-actions">${button('Yes · 지도 보기','map','button small primary')}${button('No · 계속 고르기','decline-map','button small secondary',`data-message="${i}"`)}</div>`:''}</div></div>`).join('');
+  // 저장된 대화 아래에 현재 서버 처리 단계 하나만 임시로 표시합니다.
+  if (!state.messages.length) return `<div class="chat-welcome"><span class="chat-symbol">✳</span><h3>오늘의 점심 메이트</h3><p>질문을 AI로 해석하고 DB 메뉴와 주변 식당 후보를 찾아요.<br>채식·맵기 등 수집하지 않은 조건은 별도 확인이 필요합니다.</p></div>`;
+  const messages=state.messages.map((m,i) => `<div class="message ${m.role}"><span class="message-avatar">${m.role==='user'?'나':'✳'}</span><div><p>${esc(m.text)}</p>${m.patch ? `<p class="patch-summary">${esc(patchSummary(m.patch))}</p>` : ''}${m.patch ? button('조건 변경 적용','apply-patch','button small secondary',`data-message="${i}" ${m.version!==state.version||m.turn!==state.chatTurn||state.busy?'disabled':''}`):''}${m.map && m.version===state.version ? `<div class="message-actions">${button('Yes · 지도 보기','map','button small primary')}${button('No · 계속 고르기','decline-map','button small secondary',`data-message="${i}"`)}</div>`:''}</div></div>`).join('');
+  const progress=state.busy&&state.chatProgress?`<div class="message assistant progress-message"><span class="message-avatar"><span class="progress-spinner"></span></span><div><p>${esc(state.chatProgress)}</p></div></div>`:'';
+  return messages+progress;
 }
 function recommendPage() {
   return `${pageHeading('MAKE YOUR LUNCH', '오늘은 어떻게 골라볼까요?', '운에 맡겨도 좋고, 점심 메이트에게 물어봐도 좋아요.')}${summaries()}<div class="recommend-layout"><section class="game-invite"><span class="eyebrow">LET LUCK PICK</span><div class="dice-art" aria-hidden="true">⚄</div><h2>고민 대신,<br>운 좋은 한 끼.</h2><p>조건에 맞는 메뉴 중 하나를<br>랜덤으로 골라드릴게요.</p>${button('메뉴 뽑으러 가기 ↗','game','button dark full')}<small>외부 게임 없이 동작하는 데모 추첨</small></section><section class="chat-panel"><div class="chat-header"><div><span class="status-dot"></span><b>점심 메이트</b></div><span id="ai-connection-summary" class="tiny-label ai-connection-summary" data-status="checking" data-busy="${state.busy}">${state.busy?'AI 응답 생성 중…':'AI 연결 확인 중'}</span></div><div id="groq-connection" class="groq-connection" data-status="checking" role="status" aria-live="polite"><div><b class="groq-status-label">Groq 연결 확인 중</b><p class="groq-status-detail">연결 상태를 확인합니다.</p><small class="groq-status-time">아직 확인된 시각이 없습니다.</small></div><button class="button small secondary" data-action="check-groq">연결 다시 확인</button></div><div class="chat-body" id="chat-body" role="log" aria-live="polite">${chatMessages()}</div><div class="quick-prompts">${['지금 조건으로 추천해줘','가까운 식당 보여줘','메뉴 설명해줘'].map(q=>button(esc(q),'prompt','prompt-button',`data-text="${q}" ${state.busy?'disabled':''}`)).join('')}</div><form id="chat-form" class="chat-input"><label class="sr-only" for="chat-message">점심 질문</label><input id="chat-message" name="message" maxlength="500" placeholder="오늘 점심은 어떤 게 좋을까요?" required ${state.busy?'disabled':''}><button class="send-button" aria-label="메시지 보내기" ${state.busy?'disabled':''}>${state.busy?'…':'↑'}</button></form></section></div>${resultCards()}`;
@@ -121,7 +157,7 @@ function recommendPage() {
 function gamePage() {
   const menu = state.result?.menu;
   // 카탈로그 예상 가격을 실제 식당 가격처럼 표시하지 않고 메뉴 분류와 검색 상태를 구분합니다.
-  return `${pageHeading('A LUCKY LITTLE LUNCH', '오늘의 한 끼를 뽑아보세요.', '예시 메뉴를 고른 뒤 주변 관련 식당을 검색합니다.')}${summaries()}<section class="game-stage"><span class="tiny-label">LUNCH LOTTERY</span><div class="lottery-icon ${state.busy?'rolling':''}">${menu?menu.emoji:'🎲'}</div><h2>${state.busy?'메뉴를 고르고 식당을 검색하는 중…':menu?esc(menu.name):'오늘은 뭐가 나올까요?'}</h2><p>${esc(state.result?.message||'메뉴의 예시 분류·예상 가격으로 후보를 고릅니다. 실제 매장 조건은 미확인입니다.')}</p><div class="game-actions">${menu?button('식당 후보 보기 →','map','button dark',state.busy?'disabled':''):''}${button(menu?'한번 더! ↻':'랜덤 메뉴 뽑기 ↗','draw-menu','button primary',state.busy?'disabled':'')}</div><small>식당 가격·채식·맵기·총소요시간은 검증하지 않았습니다.</small></section>`;
+  return `${pageHeading('A LUCKY LITTLE LUNCH', '오늘의 한 끼를 뽑아보세요.', 'DB 메뉴 카탈로그와 주변에서 확인된 메뉴를 기준으로 고릅니다.')}${summaries()}<section class="game-stage"><span class="tiny-label">LUNCH LOTTERY</span><div class="lottery-icon ${state.busy?'rolling':''}">${menu?menu.emoji:'🎲'}</div><h2>${state.busy?'메뉴를 고르고 식당을 검색하는 중…':menu?esc(menu.name):'오늘은 뭐가 나올까요?'}</h2><p>${esc(state.result?.message||'저장된 메뉴 정보에서 현재 조건에 맞는 후보를 고릅니다.')}</p><div class="game-actions">${menu?button('식당 후보 보기 →','map','button dark',state.busy?'disabled':''):''}${button(menu?'한번 더! ↻':'랜덤 메뉴 뽑기 ↗','draw-menu','button primary',state.busy?'disabled':'')}</div><small>식당별 가격과 영업 여부는 식당 검색 단계에서 확인합니다.</small></section>`;
 }
 function mapGraphic(items) {
   // 실제 지도와 로딩·실패 안내를 분리하여 마커를 가리지 않게 합니다.
@@ -264,17 +300,28 @@ async function sendChat(message) {
   // 추첨 도중 다른 화면에서 채팅을 시작해도 기존 타이머가 검색 결과를 덮지 않게 합니다.
   cancelSpin();
   const version=state.version, turn=++state.chatTurn;
-  state.messages.push({role:'user',text:message});state.busy=true;render();
-  // Groq 해석 이후 서버가 반환한 실제 검색 결과만 기존 카드·지도에 연결합니다.
+  const controller=new AbortController();state.chatController=controller;let timedOut=false;
+  const timeout=setTimeout(()=>{timedOut=true;controller.abort();},120000);
+  state.messages.push({role:'user',text:message});state.chatProgress='요청을 시작하고 있어요.';state.busy=true;render();
+  // 완료 이벤트의 검증된 결과만 카드·지도에 연결하고 중간 이벤트는 진행 문구로만 사용합니다.
   try {
-    const data=await api('chat',{...payload(true),message});
+    let data=null,failed=null;
+    await streamChat({...payload(true),message},event=>{
+      if(version!==state.version)return;
+      if(event.event==='completed')data=event.data;
+      else if(event.event==='failed')failed=new Error(event.message||'요청을 처리하지 못했어요.');
+      else if(typeof event.message==='string'){state.chatProgress=event.message;render();}
+    },controller.signal);
+    if(failed)throw failed;
+    if(!data)throw new Error('최종 응답을 확인하지 못했어요. 다시 시도해 주세요.');
     if(version!==state.version)return;
     if(data.result){cancelSpin();state.result=data.result;state.cardPage=0;state.mapPage=0;state.selected=null;state.gamePlayed=false;}
     state.messages.push({role:'assistant',text:data.text,patch:data.suggested_patch,version,turn});
     if(data.result?.restaurants?.length)state.messages.push({role:'assistant',text:'검색된 식당 후보 목록과 주변 지도를 볼까요?',map:true,version});
   } catch(e){
-    if(version===state.version){state.result=null;state.selected=null;state.messages.push({role:'assistant',text:e.name==='TimeoutError'?'전체 요청 시간이 초과되었습니다. 다시 시도해 주세요.':e.message});}
-  } finally {state.busy=false;render();}
+    // 화면 이동으로 취소한 요청은 새 화면에 실패 메시지를 남기지 않는다.
+    if(version===state.version&&!(e.name==='AbortError'&&!timedOut)){state.result=null;state.selected=null;state.messages.push({role:'assistant',text:timedOut?'전체 요청 시간이 초과되었습니다. 다시 시도해 주세요.':e.message});}
+  } finally {clearTimeout(timeout);if(state.chatController===controller)state.chatController=null;state.chatProgress='';state.busy=false;render();}
 }
 
 function drawRestaurant() {
@@ -357,5 +404,7 @@ document.addEventListener('click',async event=>{
   }
   if(action==='remove-preference'&&state.user){delete state.prefs[state.user.name][el.dataset.id];try{localStorage.setItem('lr-demo-preferences',JSON.stringify(state.prefs));}catch{}render();}
 });
-window.addEventListener('hashchange',()=>{cancelSpin();render();window.scrollTo({top:0,behavior:'instant'});});
+window.addEventListener('hashchange',()=>{cancelChatRequest();cancelSpin();render();window.scrollTo({top:0,behavior:'instant'});});
+// 복원 요청은 비동기로 시작하고 즉시 기본 화면을 그린다. 응답이 오면 한 번 더 갱신한다.
+restoreChatSession();
 render();

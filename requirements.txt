@@ -25,11 +25,11 @@ transformers==4.57.1
 huggingface-hub==0.36.0
 streamlit==1.51.0
 python-dotenv==1.2.4
-# transformers>=5.0.0,<6.0.0
 safetensors>=0.4.5
 sentencepiece>=0.2.0
 supabase==2.34.0
 psycopg[binary]==3.3.8
 redis==8.1.0
 sqlalchemy == 2.1.8
+alembic==1.20.1
 playwright==1.64.1

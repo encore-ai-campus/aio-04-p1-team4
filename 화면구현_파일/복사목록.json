@@ -1,0 +1,105 @@
+{
+  "source": "C:\\Users\\Playdata\\project1\\examples\\kakao-map",
+  "files": [
+    {
+      "file": "examples\\kakao-map\\index.html",
+      "bytes": 9556,
+      "sha256": "d718365602cf98026c826f5449ad73debebe62011e303bd507fe9dbbcebdf922"
+    },
+    {
+      "file": "examples\\kakao-map\\styles.css",
+      "bytes": 20708,
+      "sha256": "ca6cff85dd38e08bf9f70904b0cdf113ca2da022b4adb0b2a499891a177fdb66"
+    },
+    {
+      "file": "examples\\kakao-map\\app.js",
+      "bytes": 52434,
+      "sha256": "cbc867f93b9098b6e48f94342b3f0678082c09abf90dba6452a13734f0b12aee"
+    },
+    {
+      "file": "examples\\kakao-map\\data.js",
+      "bytes": 3877,
+      "sha256": "63f266eb8a0293eb2b8b9737ec11d33e9cc98f07f9f50e0531381daa4c9cc005"
+    },
+    {
+      "file": "examples\\kakao-map\\cuisine-data.js",
+      "bytes": 1223245,
+      "sha256": "818c62f005a212db0d5ed13a57fd14b98ad00fc2e314db94b69157fccb35cfcc"
+    },
+    {
+      "file": "examples\\kakao-map\\cuisine.js",
+      "bytes": 4128,
+      "sha256": "1071c397ca58cbfb1626f14b3d68f622afe374a990033217aedc473165f5658d"
+    },
+    {
+      "file": "examples\\kakao-map\\menus.js",
+      "bytes": 5966998,
+      "sha256": "e881985c0db22403724354f7db1a7e2020b55e60a628c0af4d92e11df9179ad7"
+    },
+    {
+      "file": "examples\\kakao-map\\nearby-data.js",
+      "bytes": 891669,
+      "sha256": "0897ce9b83e347656864d955a480aa3c8e440af58c644bfd10b46f0e8d63f189"
+    },
+    {
+      "file": "examples\\kakao-map\\nearby-search.js",
+      "bytes": 6162,
+      "sha256": "92209324e8df6e5384944afd6bc086fe934721f7a2e738aa5bb5b2a6edc32f17"
+    },
+    {
+      "file": "examples\\kakao-map\\location.js",
+      "bytes": 2097,
+      "sha256": "c81c74109d174d415f7d1aec76fc7a560aea02b91f6ffda2f393b58a096b617c"
+    },
+    {
+      "file": "examples\\kakao-map\\routes.js",
+      "bytes": 1708,
+      "sha256": "11c28130c9643b08035840f3222aec90fd80e2a8cda212a67bdb15b82ef8f044"
+    },
+    {
+      "file": "examples\\kakao-map\\business-hours-data.js",
+      "bytes": 3654473,
+      "sha256": "e532912ee0dfd9497b861288c4f16813c11ab817d4454397897b4cb776b2c06d"
+    },
+    {
+      "file": "examples\\kakao-map\\business-hours.js",
+      "bytes": 3655,
+      "sha256": "110b9b0f78915277d9975c48732935bad78a2e6bdce75093440be5944fd8f669"
+    },
+    {
+      "file": "examples\\kakao-map\\pin-overlaps.js",
+      "bytes": 730,
+      "sha256": "b4a19d93bd0796fc7abdf6e98886ddcc34d31dd1883b28f7a5ae6518ed99c860"
+    },
+    {
+      "file": "examples\\kakao-map\\menu-catalog.html",
+      "bytes": 2351,
+      "sha256": "fa85c70c724b97d656d846a73db71e77d87c7f15c450c15d2397fb4feeaa7f21"
+    },
+    {
+      "file": "examples\\kakao-map\\menu-catalog.css",
+      "bytes": 4364,
+      "sha256": "f91f4f78bf557da6a2bdabf1daafcfc9599f926777a9176fad1b37df02a15fcf"
+    },
+    {
+      "file": "examples\\kakao-map\\menu-catalog.js",
+      "bytes": 12928,
+      "sha256": "2824b9c514559283af11001a94117c01d9fbcce42938452c29f4b41611bd3b11"
+    },
+    {
+      "file": "examples\\kakao-map\\menu-catalog-data.js",
+      "bytes": 6823636,
+      "sha256": "bf8646ceb290b9b811605f14bbea05a9fd9f3e8b1e2843e7092d838b383a4a08"
+    },
+    {
+      "file": "examples\\kakao-map\\serve.py",
+      "bytes": 2743,
+      "sha256": "f886c025013f7315a5fd0ce4dfe2c5089c974df0047e798a4e4989f907df7692"
+    },
+    {
+      "file": "examples\\kakao-map\\walk_routes.py",
+      "bytes": 5017,
+      "sha256": "40bfa7c44d90a77de62a47e6f0d3bfb0c8b2f9976613086225945e9427c550f6"
+    }
+  ]
+}

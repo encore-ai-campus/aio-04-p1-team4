@@ -2,7 +2,7 @@
 import json
 import unittest
 from pydantic import ValidationError
-from app.chat_policy import POLICY_DIR, build_interpretation_messages, parse_interpretation, load_replies
+from app.chat_policy import EXAMPLES_FILE, build_interpretation_messages, parse_interpretation, load_replies
 from app.database.seed import DEFAULT_MENU_CATALOG
 
 
@@ -24,10 +24,11 @@ class ChatPolicyTests(unittest.TestCase):
         self.ids = {m["id"] for m in MENUS}
 
     def test_examples_follow_contract(self):
-        examples = json.loads((POLICY_DIR / "examples.json").read_text(encoding="utf-8"))
+        # 보관 중인 예전 예시 대신 현재 코드에 적용된 예시 계약을 검증한다.
+        examples = json.loads(EXAMPLES_FILE.read_text(encoding="utf-8"))
         for example in examples:
             with self.subTest(question=example["question"]):
-                parse_interpretation(json.dumps(example["expected"]), self.ids)
+                parse_interpretation(json.dumps(example["expected"]), self.ids, {"restaurant-1", "restaurant-2"})
 
     def test_rejects_untrusted_fields_and_contradictions(self):
         # 생성된 식당·좌표, 알 수 없는 메뉴, 확인 없는 조건 변경을 거부합니다.

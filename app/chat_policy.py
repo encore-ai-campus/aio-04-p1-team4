@@ -7,16 +7,17 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from .food_types import FoodType
 
 
 POLICY_DIR = Path(__file__).resolve().parent / "prompts"
-SYSTEM_PROMPT_FILE = POLICY_DIR / "system_v2.txt"
-EXAMPLES_FILE = POLICY_DIR / "examples_v2.json"
-REPLIES_FILE = POLICY_DIR / "replies_v3.json"
+SYSTEM_PROMPT_FILE = POLICY_DIR / "system_v4.txt"
+EXAMPLES_FILE = POLICY_DIR / "examples_v3.json"
+REPLIES_FILE = POLICY_DIR / "replies_v4.json"
 
 
 def load_replies() -> dict[str, str]:
-    """코드가 적용하는 최신 v2 안내문 키와 문자열 범위를 검사한다."""
+    """코드가 적용하는 최신 안내문 키와 문자열 범위를 검사한다."""
 
     replies = json.loads(REPLIES_FILE.read_text(encoding="utf-8"))
     required = {
@@ -37,9 +38,8 @@ class ConditionPatch(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     minutes: int | None = Field(default=None, ge=10, le=120)
     budget: int | None = Field(default=None, ge=1000, le=100000)
-    cuisine: Literal["전체", "한식", "중식", "일식", "양식", "샐러드"] | None = None
-    diet: Literal["any", "vegetarian", "vegan"] | None = None
-    spicy: bool | None = None
+    cuisine: FoodType | None = None
+    # Groq도 삭제된 채식·맵기 조건 변경을 제안할 수 없다.
     radius_m: int | None = Field(default=None, ge=50, le=500)
 
 

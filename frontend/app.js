@@ -1,7 +1,9 @@
 /* 위치·식당은 카카오, 질문 해석은 Groq, 메뉴·상세정보는 DB를 사용합니다. 인증은 아직 데모입니다. */
 const $ = (s, root = document) => root.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const defaults = () => ({ minutes: 45, budget: 12000, cuisine: '전체', diet: 'any', spicy: true });
+const defaults = () => ({ minutes: 45, budget: 12000, cuisine: '전체' });
+// 서버 FoodType과 같은 사용자 선택지. 업태의 상세 매핑은 서버가 수행한다.
+const foodTypes = ['전체','한식','중식','일식/회','양식','분식','패스트푸드','치킨','도시락/구내식당','뷔페식','냉면','고기','카페/빵','술집','기타'];
 // 위치는 실제 조회 결과만 저장합니다. 반경은 다음 식당 검색 연결을 위한 요청값입니다.
 const locationSearch = { kind: 'place', query: '', items: [], error: '', busy: false, token: 0, controller: null, timer: null };
 // 위치 반경은 음식 조건과 별도로 관리하며 기본값은 500m입니다.
@@ -44,7 +46,8 @@ async function restoreChatSession() {
     const saved=await response.json();
     // 복원 요청 중 사용자가 조건이나 대화를 변경했다면 오래된 서버 응답을 덮어쓰지 않습니다.
     if(!saved.exists||state.version!==localVersion||state.messages.length)return;
-    if(saved.conditions)state.conditions={...saved.conditions};
+    // 이전 서버 응답에 삭제된 조건이 있어도 현재 허용 항목만 복원한다.
+    if(saved.conditions)state.conditions={minutes:saved.conditions.minutes,budget:saved.conditions.budget,cuisine:saved.conditions.cuisine};
     if(saved.location)state.location={...saved.location};
     if(Number.isInteger(saved.radius_m))state.radiusM=saved.radius_m;
     state.messages=(saved.turns||[]).flatMap(turn=>[
@@ -91,8 +94,8 @@ function applyRadius(form) {
   return true;
 }
 function summaries() {
-  const c = state.conditions, diet = { any: '채식 상관없음', vegetarian: '달걀·유제품 가능', vegan: '완전 채식' };
-  return `<div class="context-stack">${locationBox()}<div class="condition-bar"><span class="context-label">나의 점심 조건</span><div class="chips"><span>반경 ${state.radiusM}m</span><span>${c.minutes}분</span><span>${money(c.budget)} 이하</span><span>${esc(c.cuisine)}</span><span>${diet[c.diet]}</span><span>${c.spicy ? '매운 음식 OK' : '매운 음식 제외'}</span></div>${button('조건 수정', 'conditions', 'text-button')}</div></div>`;
+  const c = state.conditions;
+  return `<div class="context-stack">${locationBox()}<div class="condition-bar"><span class="context-label">나의 점심 조건</span><div class="chips"><span>반경 ${state.radiusM}m</span><span>${c.minutes}분</span><span>${money(c.budget)} 이하</span><span>${esc(c.cuisine)}</span></div>${button('조건 수정', 'conditions', 'text-button')}</div></div>`;
 }
 function conditionsForm(compact = false) {
   const c = state.conditions;
@@ -100,9 +103,7 @@ function conditionsForm(compact = false) {
     <!-- 조건 수정 창에서만 반경을 음식 조건과 함께 저장하며 홈 배치는 유지합니다. -->
     ${compact ? `<div class="radius-fields">${radiusField()}</div>` : ''}
     <div class="field-row"><label>남은 점심시간<span class="input-unit"><input name="minutes" type="number" min="10" max="120" step="1" required value="${c.minutes}"><span>분</span></span></label><label>내 예산<span class="input-unit"><input name="budget" type="number" min="1000" max="100000" step="500" required value="${c.budget}"><span>원</span></span></label></div>
-    <fieldset><legend>오늘 끌리는 음식 종류</legend><div class="cuisine-options">${['전체','한식','중식','일식','양식','샐러드'].map((v,i) => `<label class="choice"><input type="radio" name="cuisine" value="${v}" ${c.cuisine === v ? 'checked' : ''}><span>${['✳','🍚','🥟','🍱','🍝','🥗'][i]} ${v}</span></label>`).join('')}</div></fieldset>
-    <label>채식 여부<select name="diet"><option value="any" ${c.diet === 'any' ? 'selected' : ''}>상관없음</option><option value="vegetarian" ${c.diet === 'vegetarian' ? 'selected' : ''}>달걀 및 유제품 가능</option><option value="vegan" ${c.diet === 'vegan' ? 'selected' : ''}>완전 채식</option></select></label>
-    <label class="check-row"><span><b>매운 음식도 괜찮아요</b><small>해제하면 매운 메뉴를 제외해요</small></span><input type="checkbox" name="spicy" ${c.spicy ? 'checked' : ''}></label>
+    <fieldset><legend>오늘 끌리는 음식 종류</legend><div class="cuisine-options">${foodTypes.map(v => `<label class="choice"><input type="radio" name="cuisine" value="${v}" ${c.cuisine === v ? 'checked' : ''}><span>${v}</span></label>`).join('')}</div></fieldset>
     <button type="button" class="add-condition" disabled>＋ 음식 조건 추가 <small>COMING SOON</small></button>
     <button type="submit" class="button primary full">${compact ? '변경한 조건 적용' : '조건 선택 완료'} <span>↗</span></button>
     <button type="button" data-action="reset" class="text-button reset">↻ 조건 초기화</button>
@@ -134,7 +135,7 @@ function restaurantCard(item, sidebar = false) {
   const menu=item.menu_verified?`메뉴: ${esc(item.menu_name||item.search_keyword||'확인됨')}`:'메뉴 확인 불가';
   const warnings=Array.isArray(item.warnings)&&item.warnings.length?` · ${esc(item.warnings.join(' · '))}`:'';
   // 추천과 확인 필요 후보가 같은 카드 구조를 사용하되 확인 상태를 문장으로 구분합니다.
-  return `<article class="restaurant-card ${sidebar?'list-card':''} ${state.selected===item.id?'selected':''}">${preferenceButtons(item)}<button class="card-image" data-action="select-restaurant" data-id="${esc(item.id)}" aria-label="${esc(item.name)} 선택"><span>⌑</span><small>No image</small></button><div class="card-content"><span class="card-category">${esc(item.category||'분류 데이터 없음')}</span><button class="card-name" data-action="select-restaurant" data-id="${esc(item.id)}">${sidebar?`${(state.result?.restaurants||[]).slice(state.mapPage*5,state.mapPage*5+5).findIndex(p=>p.id===item.id)+1}. `:''}${esc(item.name)}</button><span class="menu-line">${menu} · 현재 영업 중</span><span class="card-address">${esc(item.address||'주소 데이터 없음')}</span><div class="card-price">${price} <span>메뉴 가격</span></div><div class="card-meta"><span>☆ 평점 데이터 없음</span><span>직선거리 ${distance}</span></div><small class="estimate-note">이동시간·채식·맵기 미확인${warnings}</small></div></article>`;
+  return `<article class="restaurant-card ${sidebar?'list-card':''} ${state.selected===item.id?'selected':''}">${preferenceButtons(item)}<button class="card-image" data-action="select-restaurant" data-id="${esc(item.id)}" aria-label="${esc(item.name)} 선택"><span>⌑</span><small>No image</small></button><div class="card-content"><span class="card-category">${esc(item.category||'분류 데이터 없음')}</span><button class="card-name" data-action="select-restaurant" data-id="${esc(item.id)}">${sidebar?`${(state.result?.restaurants||[]).slice(state.mapPage*5,state.mapPage*5+5).findIndex(p=>p.id===item.id)+1}. `:''}${esc(item.name)}</button><span class="menu-line">${menu} · 현재 영업 중</span><span class="card-address">${esc(item.address||'주소 데이터 없음')}</span><div class="card-price">${price} <span>메뉴 가격</span></div><div class="card-meta"><span>☆ 평점 데이터 없음</span><span>직선거리 ${distance}</span></div><small class="estimate-note">이동시간 미확인${warnings}</small></div></article>`;
 }
 function resultCards() {
   const items=state.result?.restaurants||[], candidates=state.result?.candidate_restaurants||[];
@@ -146,7 +147,7 @@ function resultCards() {
 }
 function chatMessages() {
   // 저장된 대화 아래에 현재 서버 처리 단계 하나만 임시로 표시합니다.
-  if (!state.messages.length) return `<div class="chat-welcome"><span class="chat-symbol">✳</span><h3>오늘의 점심 메이트</h3><p>질문을 AI로 해석하고 DB 메뉴와 주변 식당 후보를 찾아요.<br>채식·맵기 등 수집하지 않은 조건은 별도 확인이 필요합니다.</p></div>`;
+  if (!state.messages.length) return `<div class="chat-welcome"><span class="chat-symbol">✳</span><h3>오늘의 점심 메이트</h3><p>질문을 AI로 해석하고 DB 메뉴와 주변 식당 후보를 찾아요.<br>메뉴와 가격, 영업 여부는 식당별 수집 정보를 확인해 안내합니다.</p></div>`;
   const messages=state.messages.map((m,i) => `<div class="message ${m.role}"><span class="message-avatar">${m.role==='user'?'나':'✳'}</span><div><p>${esc(m.text)}</p>${m.patch ? `<p class="patch-summary">${esc(patchSummary(m.patch))}</p>` : ''}${m.patch ? button('조건 변경 적용','apply-patch','button small secondary',`data-message="${i}" ${m.version!==state.version||m.turn!==state.chatTurn||state.busy?'disabled':''}`):''}${m.map && m.version===state.version ? `<div class="message-actions">${button('Yes · 지도 보기','map','button small primary')}${button('No · 계속 고르기','decline-map','button small secondary',`data-message="${i}"`)}</div>`:''}</div></div>`).join('');
   const progress=state.busy&&state.chatProgress?`<div class="message assistant progress-message"><span class="message-avatar"><span class="progress-spinner"></span></span><div><p>${esc(state.chatProgress)}</p></div></div>`:'';
   return messages+progress;
@@ -157,7 +158,7 @@ function recommendPage() {
 function gamePage() {
   const menu = state.result?.menu;
   // 카탈로그 예상 가격을 실제 식당 가격처럼 표시하지 않고 메뉴 분류와 검색 상태를 구분합니다.
-  return `${pageHeading('A LUCKY LITTLE LUNCH', '오늘의 한 끼를 뽑아보세요.', 'DB 메뉴 카탈로그와 주변에서 확인된 메뉴를 기준으로 고릅니다.')}${summaries()}<section class="game-stage"><span class="tiny-label">LUNCH LOTTERY</span><div class="lottery-icon ${state.busy?'rolling':''}">${menu?menu.emoji:'🎲'}</div><h2>${state.busy?'메뉴를 고르고 식당을 검색하는 중…':menu?esc(menu.name):'오늘은 뭐가 나올까요?'}</h2><p>${esc(state.result?.message||'저장된 메뉴 정보에서 현재 조건에 맞는 후보를 고릅니다.')}</p><div class="game-actions">${menu?button('식당 후보 보기 →','map','button dark',state.busy?'disabled':''):''}${button(menu?'한번 더! ↻':'랜덤 메뉴 뽑기 ↗','draw-menu','button primary',state.busy?'disabled':'')}</div><small>식당별 가격과 영업 여부는 식당 검색 단계에서 확인합니다.</small></section>`;
+  return `${pageHeading('A LUCKY LITTLE LUNCH', '오늘의 한 끼를 뽑아보세요.', '설정한 예산과 음식 종류에 맞는 메뉴를 고릅니다.')}${summaries()}<section class="game-stage"><span class="tiny-label">LUNCH LOTTERY</span><div class="lottery-icon ${state.busy?'rolling':''}">${menu?menu.emoji:'🎲'}</div><h2>${state.busy?'메뉴를 고르는 중…':menu?esc(menu.name):'오늘은 뭐가 나올까요?'}</h2><p>${esc(state.result?.message||'저장된 메뉴 정보에서 현재 조건에 맞는 후보를 고릅니다.')}</p><div class="game-actions">${menu?button('이 메뉴로 식당 찾기 →','find-restaurants','button dark',state.busy?'disabled':''):''}${button(menu?'한번 더! ↻':'랜덤 메뉴 뽑기 ↗','draw-menu','button primary',state.busy?'disabled':'')}</div><small>식당별 가격과 영업 여부는 식당 검색 단계에서 확인합니다.</small></section>`;
 }
 function mapGraphic(items) {
   // 실제 지도와 로딩·실패 안내를 분리하여 마커를 가리지 않게 합니다.
@@ -166,7 +167,7 @@ function mapGraphic(items) {
 function mapPage() {
   const items = state.result?.restaurants || [];
   // 지도에는 메뉴·예산·현재 영업 여부가 확인된 추천 식당만 표시합니다.
-  return `${pageHeading('FIND YOUR LUNCH SPOT', '추천 식당을 지도에서 살펴보세요.', '현재 영업 중이며 메뉴와 예산이 확인된 식당만 번호 마커로 표시합니다.')}${summaries()}<p class="candidate-notice">메뉴·가격·현재 영업 여부 확인 완료 · 채식·맵기·총소요시간 미확인${state.result?.has_more?' · 첫 검색 페이지 일부만 확인':''}</p><div class="map-layout"><aside class="restaurant-sidebar"><div class="sidebar-title"><h2>${state.result?.menu?esc(state.result.menu.name):'추천 식당'} <small>${items.length}</small></h2><span>DB 검증 결과</span></div>${button(state.spinning?'두근두근… 5초 추첨 중':state.gamePlayed?'한번 더! ↻':'식당 랜덤 선택 ⚄','draw-restaurant','button primary full',`${!items.length||state.spinning?'disabled':''}`)}<div class="sidebar-items">${items.length?items.slice(state.mapPage*5,state.mapPage*5+5).map(i=>restaurantCard(i,true)).join(''):`<div class="empty"><span>⌑</span><h3>현재 추천 가능한 식당이 없어요</h3><p>${esc(state.result?.message || '게임이나 점심 메이트에서 메뉴를 먼저 골라주세요.')}</p>${button('메뉴 고르러 가기','recommend','button small secondary')}</div>`}</div>${pager(state.mapPage,5,items.length,'map-page')}</aside>${mapGraphic(items)}</div>`;
+  return `${pageHeading('FIND YOUR LUNCH SPOT', '추천 식당을 지도에서 살펴보세요.', '현재 영업 중이며 메뉴와 예산이 확인된 식당만 번호 마커로 표시합니다.')}${summaries()}<p class="candidate-notice">${state.busy?'선정한 메뉴의 식당을 검색하고 정보를 확인하고 있어요.':'수집 정보 기준 추천 결과 · 총소요시간 미확인'}${state.result?.has_more?' · 첫 검색 페이지 일부만 확인':''}</p><div class="map-layout"><aside class="restaurant-sidebar"><div class="sidebar-title"><h2>${state.result?.menu?esc(state.result.menu.name):'추천 식당'} <small>${items.length}</small></h2><span>DB 검증 결과</span></div>${button(state.spinning?'두근두근… 5초 추첨 중':state.gamePlayed?'한번 더! ↻':'식당 랜덤 선택 ⚄','draw-restaurant','button primary full',`${!items.length||state.spinning?'disabled':''}`)}<div class="sidebar-items">${items.length?items.slice(state.mapPage*5,state.mapPage*5+5).map(i=>restaurantCard(i,true)).join(''):`<div class="empty"><span>⌑</span><h3>${state.busy?'식당을 찾고 있어요':'현재 추천 가능한 식당이 없어요'}</h3><p>${esc(state.result?.message || '게임이나 점심 메이트에서 메뉴를 먼저 골라주세요.')}</p>${button('메뉴 고르러 가기','recommend','button small secondary')}</div>`}</div>${pager(state.mapPage,5,items.length,'map-page')}</aside>${mapGraphic(items)}</div>`;
 }
 function profilePage() {
   if (!state.user) return `<section class="empty page-empty"><h1>회원 전용 공간이에요</h1><p>실제 계정 없이 데모 회원 기능을 체험해 보세요.</p>${button('데모 로그인','login','button primary')}</section>`;
@@ -215,7 +216,7 @@ function chooseLocation() {
   // 홈에서 작성 중인 유효한 조건은 위치 설정 후 다시 그려져도 유지합니다.
   const draft=$('#conditions-form');
   if(draft && draft.checkValidity()) {
-    const d=new FormData(draft);const next={minutes:Number(d.get('minutes')),budget:Number(d.get('budget')),cuisine:d.get('cuisine'),diet:d.get('diet'),spicy:d.has('spicy')};
+    const d=new FormData(draft);const next={minutes:Number(d.get('minutes')),budget:Number(d.get('budget')),cuisine:d.get('cuisine')};
     // 작성 중 조건이 달라졌다면 위치 선택을 취소하더라도 이전 추천을 재사용하지 않습니다.
     if(JSON.stringify(next)!==JSON.stringify(state.conditions)){state.conditions=next;invalidate();}
   }
@@ -271,21 +272,37 @@ async function drawMenu() {
   invalidate();
   // 재검색이 실패해도 이전 식당을 새 결과처럼 보여주지 않도록 시작 시 목록을 비웁니다.
   const version=state.version;state.result=null;state.selected=null;state.gamePlayed=false;state.busy=true;render();
-  try { const result=await api('recommendations',payload()); if(version!==state.version) return; state.result=result; state.selected=null; state.cardPage=0; state.mapPage=0; if(!result.menu) toast(result.message); }
+  // 이 단계에서는 저장 DB에서 조건에 맞는 메뉴만 고르고 외부 검색은 시작하지 않는다.
+  try { const result=await api('menus/draw',payload()); if(version!==state.version) return; state.result=result; state.selected=null; state.cardPage=0; state.mapPage=0; if(!result.menu) toast(result.message); }
   catch(e){if(version===state.version){state.result={menu:null,restaurants:[],message:e.message};toast(e.message);}} finally {state.busy=false;render();}
+}
+async function findSelectedRestaurants() {
+  if(state.busy||!state.result?.menu)return;
+  // 선정 메뉴 ID와 현재 조건을 먼저 확정해 지도 전환 후에도 같은 메뉴로 검색한다.
+  const body=payload(true),version=state.version,menu=state.result.menu;
+  state.result={...state.result,restaurants:[],candidate_restaurants:[],message:'선정한 메뉴의 식당을 찾고 있어요.'};
+  state.selected=null;state.cardPage=0;state.mapPage=0;state.busy=true;
+  go('map');render();
+  try {
+    const result=await api('recommendations',body);
+    if(version!==state.version)return;
+    state.result=result;
+  } catch(e) {
+    // 검색 실패가 이미 뽑힌 메뉴를 지우지 않도록 메뉴는 보존한다.
+    if(version===state.version){state.result={menu,restaurants:[],candidate_restaurants:[],message:e.message};toast(e.message);}
+  } finally {state.busy=false;render();}
 }
 // 변경안을 실제 값으로 표시하며 사용자 확인 전에는 상태를 바꾸지 않습니다.
 function patchSummary(patch) {
-  const names={minutes:'점심시간',budget:'예산',cuisine:'음식 종류',diet:'채식',spicy:'매운 음식',radius_m:'반경'};
-  const diets={any:'상관없음',vegetarian:'달걀·유제품 가능',vegan:'완전 채식'};
-  return Object.entries(patch).map(([k,v])=>`${names[k]||k}: ${k==='diet'?diets[v]:k==='spicy'?(v?'가능':'제외'):v}${k==='radius_m'?'m':k==='minutes'?'분':k==='budget'?'원':''}`).join(' · ');
+  const names={minutes:'점심시간',budget:'예산',cuisine:'음식 종류',radius_m:'반경'};
+  return Object.entries(patch).map(([k,v])=>`${names[k]||k}: ${v}${k==='radius_m'?'m':k==='minutes'?'분':k==='budget'?'원':''}`).join(' · ');
 }
 function applyChatPatch(index) {
   const m=state.messages[index];
   // 다른 질문·위치·조건 변경 이후의 제안이나 중복 적용은 실행하지 않습니다.
   if(state.busy||!m?.patch||m.version!==state.version||m.turn!==state.chatTurn)return false;
   const patch=m.patch, {radius_m,...food}=patch;
-  const allowed=['minutes','budget','cuisine','diet','spicy','radius_m'];
+  const allowed=['minutes','budget','cuisine','radius_m'];
   if(Object.keys(patch).some(k=>!allowed.includes(k)))return false;
   if(radius_m!==undefined&&(!Number.isInteger(radius_m)||radius_m<50||radius_m>500))return false;
   state.conditions={...state.conditions,...food};
@@ -343,7 +360,7 @@ document.addEventListener('submit',async event=>{
     if(!form.reportValidity())return;
     const radiusDraft=data.has('radius_m') ? form : $('.radius-form');
     if(radiusDraft && !applyRadius(radiusDraft))return;
-    state.conditions={minutes:Number(data.get('minutes')),budget:Number(data.get('budget')),cuisine:data.get('cuisine'),diet:data.get('diet'),spicy:data.has('spicy')};invalidate();
+    state.conditions={minutes:Number(data.get('minutes')),budget:Number(data.get('budget')),cuisine:data.get('cuisine')};invalidate();
     if($('#modal').open){$('#modal').close();render();toast('조건을 변경했어요. 이전 추천은 초기화했습니다.');}
     else if(!state.location){render();chooseLocation();toast('조건을 저장했어요. 기준 위치를 골라주세요.');}
     else go('recommend');
@@ -382,6 +399,7 @@ document.addEventListener('click',async event=>{
   if(action==='logout'){state.user=null;render();toast('게스트 모드로 전환했어요.');}
   if(action==='unavailable')toast('이 기능은 인증 서비스 연결 후 사용할 수 있어요.');
   if(action==='draw-menu')await drawMenu();
+  if(action==='find-restaurants')await findSelectedRestaurants();
   // 연결 확인 버튼은 채팅·조건·입력 내용을 초기화하지 않습니다.
   if(action==='check-groq')window.LunchRunGroqStatus?.check(true);
   if(action==='prompt')await sendChat(el.dataset.text);

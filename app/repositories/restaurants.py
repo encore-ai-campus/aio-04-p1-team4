@@ -68,8 +68,8 @@ def save_restaurants(
             result.failed += 1
             continue
 
-        # 카카오 음식점 그룹(FD6)이 아닌 장소는 restaurant에 넣지 않는다.
-        if record.category_group_code != "FD6":
+        # 음식점과 카페만 저장하며 다른 장소 그룹은 제외한다.
+        if record.category_group_code not in {"FD6", "CE7"}:
             result.skipped += 1
             continue
 

@@ -21,6 +21,7 @@ from sqlalchemy import (
     true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from ..food_types import CATALOG_CUISINE_CHECK
 
 
 # SQLite에서 시작한 뒤 PostgreSQL로 옮겨도 제약조건 이름이 일정하도록 규칙을 고정한다.
@@ -50,7 +51,8 @@ class MenuCatalog(Base):
     __table_args__ = (
         CheckConstraint("price_hint IS NULL OR price_hint >= 0", name="price_hint_nonnegative"),
         CheckConstraint(
-            "cuisine IN ('한식', '중식', '일식', '양식', '샐러드')",
+            # 화면의 실제 음식 종류 14개와 같은 값만 저장한다 ('전체' 제외).
+            CATALOG_CUISINE_CHECK,
             name="cuisine_value",
         ),
         Index("ix_menu_catalog_filter", "active", "cuisine", "price_hint"),

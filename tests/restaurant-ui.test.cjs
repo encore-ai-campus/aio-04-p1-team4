@@ -36,6 +36,27 @@ test('검색 실패 시 이전 결과가 남지 않음',async()=>{
   assert.equal(run('state.result.restaurants.length'),0);assert.equal(run('state.result.message'),'카카오 권한 확인');
 });
 
+test('게임은 조건에 맞는 메뉴만 뽑고 확인 버튼에서 같은 메뉴로 식당을 검색함',async()=>{
+  const calls=[];
+  const run=setup(async(url,options)=>{
+    const body=JSON.parse(options.body);calls.push({url,body});
+    return {ok:true,json:async()=>({menu:{id:'noodle',name:'짜장면',emoji:'🍜'},restaurants:[],message:'결과'})};
+  });
+  run('state.conditions={...state.conditions,cuisine:"중식",budget:9000};');
+  await run('drawMenu()');
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].url,'/api/menus/draw');
+  assert.equal(calls[0].body.conditions.cuisine,'중식');
+  assert.equal(calls[0].body.conditions.budget,9000);
+  assert.ok(run('gamePage()').includes('data-action="find-restaurants"'));
+  await run('findSelectedRestaurants()');
+  assert.equal(calls.length,2);
+  assert.equal(calls[1].url,'/api/recommendations');
+  assert.equal(calls[1].body.menu_id,'noodle');
+  assert.equal(calls[1].body.conditions.budget,9000);
+  assert.equal(run('location.hash'),'map');
+});
+
 // 반경 입력 위치와 API 요청의 현재 반경을 함께 확인합니다.
 test('반경 입력은 위치와 음식 조건 사이에 있으며 현재 반경으로 요청함',()=>{
   const run=setup();
@@ -45,6 +66,26 @@ test('반경 입력은 위치와 음식 조건 사이에 있으며 현재 반경
   assert.ok(html.includes('min="50" max="500" step="1"'));
   run('state.radiusM=51;');
   assert.equal(run('payload().radius_m'),51);
+});
+
+test('음식 조건에서 채식과 맵기 입력·요약·전송 항목을 제거함',()=>{
+  const run=setup();
+  for(const html of [run('conditionsForm()'),run('conditionsForm(true)'),run('summaries()')]){
+    assert.ok(!html.includes('name="diet"'));
+    assert.ok(!html.includes('name="spicy"'));
+    assert.ok(!html.includes('채식'));
+    assert.ok(!html.includes('매운 음식'));
+  }
+  assert.deepEqual(Object.keys(run('payload().conditions')).sort(),['budget','cuisine','minutes']);
+});
+
+test('홈과 조건 수정 창에 새 음식 종류 15개를 같은 순서로 표시함',()=>{
+  const run=setup();
+  const expected=['전체','한식','중식','일식/회','양식','분식','패스트푸드','치킨','도시락/구내식당','뷔페식','냉면','고기','카페/빵','술집','기타'];
+  for(const html of [run('conditionsForm()'),run('conditionsForm(true)')]){
+    const actual=[...html.matchAll(/name="cuisine" value="([^"]+)"/g)].map(match=>match[1]);
+    assert.deepEqual(actual,expected);
+  }
 });
 
 // 홈 배치는 유지하면서 다른 화면은 요약과 공통 조건 수정 창을 사용합니다.

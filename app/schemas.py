@@ -1,6 +1,7 @@
 """위치·추천·채팅 API가 공유하는 검증된 요청 계약."""
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from .food_types import FoodType
 
 
 # 모든 위치 입력은 WGS84 위도/경도를 사용하며 무한대·NaN·범위 밖 좌표를 거부합니다.
@@ -33,12 +34,11 @@ class LocationSearchRequest(BaseModel):
 
 
 class Conditions(BaseModel):
+    # 채식·맵기는 조건에서 제거하고 시간·예산·음식 종류만 관리한다.
     model_config = ConfigDict(extra="forbid")
     minutes: int = Field(default=30, ge=1, le=120)
     budget: int = Field(default=10000, ge=1000, le=100000)
-    cuisine: Literal["전체", "한식", "중식", "일식", "양식", "샐러드"] = "전체"
-    diet: Literal["any", "vegetarian", "vegan"] = "any"
-    spicy: bool = True
+    cuisine: FoodType = "전체"
 
 
 class RecommendationRequest(BaseModel):

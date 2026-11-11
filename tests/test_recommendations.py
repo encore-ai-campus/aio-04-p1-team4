@@ -114,6 +114,32 @@ class RecommendationTests(unittest.TestCase):
         self.assertFalse(result["menu_catalog_demo"])
         self.assertTrue(result["has_more"])
 
+    def test_game_draw_respects_conditions_without_external_search(self):
+        # 메뉴 추첨만으로 카카오 검색·Playwright·Groq가 실행되면 안 된다.
+        response = self.client.post(
+            "/api/menus/draw",
+            json={"location": LOCATION, "radius_m": 500,
+                  "conditions": {"budget": 9000, "cuisine": "중식"}},
+        )
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        self.assertEqual(result["menu"]["id"], "noodle")
+        self.assertEqual(result["menu"]["cuisine"], "중식")
+        self.assertEqual(result["restaurants"], [])
+        self.search.assert_not_awaited()
+        self.collect_details.assert_not_awaited()
+        self.interpret.assert_not_awaited()
+
+    def test_game_draw_returns_no_menu_when_conditions_have_no_candidate(self):
+        response = self.client.post(
+            "/api/menus/draw",
+            json={"location": LOCATION, "conditions": {"budget": 1000}},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["menu"])
+        self.search.assert_not_awaited()
+        self.collect_details.assert_not_awaited()
+
     def test_search_result_is_saved_and_reports_count(self):
         self.search.return_value = {
             "items": [{
@@ -165,7 +191,7 @@ class RecommendationTests(unittest.TestCase):
 
     def test_explanation_and_condition_proposal_do_not_search(self):
         for message, parsed in [("메뉴 설명해줘", QuestionInterpretation.model_validate({"intent":"explain_menu","menu_id":"noodle"}, context={"menu_ids":{"noodle"}})),
-                                ("완전 채식으로 바꿔줘", QuestionInterpretation(intent="change_conditions",condition_patch={"diet":"vegan"}))]:
+                                ("예산을 바꿔줘", QuestionInterpretation(intent="change_conditions",condition_patch={"budget":9000}))]:
             self.interpret.return_value=parsed
             response = self.client.post("/api/chat", json={**BODY, "message": message})
             self.assertEqual(response.status_code, 200)
@@ -204,7 +230,8 @@ class RecommendationTests(unittest.TestCase):
         self.assertIn("반경 500m",text)
         self.assertIn("추천 식당: 1곳",text)
         self.assertIn("확인 필요 후보: 0곳",text)
-        self.assertIn("채식·맵기 조건 미적용",text)
+        self.assertNotIn("채식",text)
+        self.assertNotIn("맵기",text)
 
     def test_clarify_scope_and_groq_errors_never_search(self):
         for parsed in (QuestionInterpretation(intent="clarify",clarification="어떤 메뉴인가요?"),QuestionInterpretation(intent="out_of_scope")):

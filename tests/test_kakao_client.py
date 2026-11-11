@@ -10,6 +10,18 @@ KEY = SecretStr("fake-test-key")
 
 
 class KakaoClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cafe_search_uses_cafe_group(self):
+        def handler(request):
+            self.assertEqual(request.url.params["category_group_code"], "CE7")
+            return httpx.Response(200, json={"documents": [
+                {**PLACE, "category_name": "음식점 > 카페", "category_group_code": "CE7"}
+            ]})
+        client = KakaoClient(KEY, transport=httpx.MockTransport(handler))
+        result = await client.search_restaurants(
+            "커피", 37.48, 126.88, category_group_code="CE7"
+        )
+        self.assertEqual(result["items"][0]["category_group_code"], "CE7")
+
     async def test_radius_rechecked_from_coordinates(self):
         # API가 잘못된 거리값을 반환해도 약 56m 후보만 남기고 약 111m 후보는 제외합니다.
         documents = [{**PLACE, "id": "near", "y": "37.4805", "distance": "9999"},

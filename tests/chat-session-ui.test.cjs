@@ -21,7 +21,7 @@ test('세션의 최근 대화·조건·선정 메뉴를 화면 상태로 복원�
   const run=setup({
     exists:true,
     turns:[{user_message:'식당 추천해줘',assistant_message:'추천 결과입니다.'}],
-    conditions:{minutes:30,budget:9000,cuisine:'중식',diet:'any',spicy:true},
+    conditions:{minutes:30,budget:9000,cuisine:'중식'},
     location:{lat:37.48,lng:126.88,name:'예시 위치',address:'',source:'place',accuracy:null},
     radius_m:300,
     selected_menu:{id:'noodle',name:'짜장면',emoji:'🍽️'}

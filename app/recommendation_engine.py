@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .database import BusinessHours, Menu, Restaurant
 from .place_details import normalize_menu_name
+from .food_types import matches_food_type
 
 
 KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
@@ -129,6 +130,7 @@ def filter_recommendation_candidates(
     *,
     now: datetime | None = None,
     menu_aliases: list[str] | None = None,
+    cuisine: str = "전체",
 ) -> RecommendationFilterResult:
     """영업 중인 식당을 메뉴·가격 확인 수준에 따라 추천과 후보로 나눈다."""
 
@@ -155,6 +157,10 @@ def filter_recommendation_candidates(
         restaurant = by_id.get(str(raw.get("id", "")))
         if restaurant is None:
             result.exclude("restaurant_missing")
+            continue
+        # 검색어가 맞더라도 사용자가 선택한 업태 그룹이 다르면 추천에서 제외한다.
+        if not matches_food_type(cuisine, restaurant.cuisine or restaurant.category_name):
+            result.exclude("cuisine_mismatch")
             continue
         status = restaurant.detail_status
 

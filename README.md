@@ -118,6 +118,8 @@ flowchart TD
 
 아래 명령은 Windows PowerShell과 프로젝트 경로 `C:\TeamProject_1`을 기준으로 작성했습니다. 다른 위치에 저장했다면 해당 경로로 바꿔주세요. 실행 스크립트는 Python 3.12 이상을 안내하며, 개발 테스트 이력은 Python 3.13 환경을 사용했습니다.
 
+빠른 실행 순서는 [별도 실행 안내](EXECUTION_GUIDE.md)를 참고하세요.
+
 ### 1. 가상환경과 의존성 준비
 
 ```powershell
@@ -127,7 +129,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m playwright install chromium
 ```
 
-Node.js는 프론트엔드 테스트에만 필요합니다. 화면 실행 자체에는 npm 빌드가 없습니다.
+Node.js는 프론트엔드 테스트와 함께 점심 게임의 방·API 서버에 필요합니다. 화면 실행 자체에는 npm 빌드가 없습니다.
 
 ### 2. 환경변수 설정
 
@@ -168,6 +170,7 @@ GROQ_MODEL=openai/gpt-oss-20b
 |---|---|
 | `http://127.0.0.1:8000` | 사용자 화면 |
 | `http://127.0.0.1:8000/map` | kakao-map 폴더의 카카오 지도·메뉴 검색 화면 |
+| `http://127.0.0.1:8000/games/` | games 폴더의 게임 화면(Node.js 게임 서버도 실행 필요) |
 | `http://127.0.0.1:8000/docs` | FastAPI 자동 API 문서 |
 | `http://127.0.0.1:8000/api/health` | 프로세스 생존 확인 |
 | `http://127.0.0.1:8000/api/readiness?refresh=true` | DB·활성 메뉴·Chromium 설치파일·키 설정 확인 |
@@ -177,6 +180,8 @@ readiness는 외부 API 인증 성공이나 실제 브라우저 실행 성공까
 지도는 별도 `serve.py` 실행 없이 같은 FastAPI 서버의 `/map`에서 열 수 있습니다.
 `KAKAO_JAVASCRIPT_KEY`는 지도 SDK에, 기존 `MAP_API_KEY`는 서버 측 도보 경로 요청에 사용합니다.
 지도 설정(`/map/config.json`)에는 공개 JavaScript 키만 반환합니다.
+
+게임을 이용하려면 별도 터미널에서 `Set-Location games` 후 `node server.mjs`를 실행하세요(기본 포트 4174). 앱은 FastAPI의 `/games/` 경로를 통해 게임 화면과 API를 제공합니다. 자세한 내용은 [게임 실행 안내](games/README.md)를 참고하세요.
 
 ### 5. 사용 예시
 
@@ -222,6 +227,7 @@ readiness는 외부 API 인증 성공이나 실제 브라우저 실행 성공까
 | POST | `/api/chat`              | 최종 JSON 채팅 응답        |
 | POST | `/api/chat/stream`       | 단계별 NDJSON 채팅 응답     |
 | GET  | `/api/chat/session`      | 현재 브라우저 세션 복원        |
+| GET, POST | `/games/{path}` | 게임 화면·방 API를 Node.js 게임 서버로 전달 |
 
 채팅 요청 예시:
 
@@ -317,6 +323,12 @@ LunchRun/
 
 ```powershell
 node --test tests\chat-session-ui.test.cjs tests\groq-status.test.cjs tests\location.test.cjs tests\location-flow.test.cjs tests\restaurant-ui.test.cjs tests\map.test.cjs
+```
+
+게임 서버 테스트:
+
+```powershell
+node --test games\room-store.test.mjs games\network.test.mjs
 ```
 
 기본 테스트는 외부 API를 모의 처리합니다. 실제 외부 검사는 선택적으로 켭니다.

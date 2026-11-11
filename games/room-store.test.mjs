@@ -1,0 +1,17 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {RoomStore} from './room-store.mjs';
+const menus=['a','b','c'].map(id=>({id,name:id}));
+function setup(clock){const store=new RoomStore(null,clock?{clock}:{}),h=store.create({nickname:'현서',menus,filters:{location:'독산역'}}),g=store.join(h.code,'친구');return {store,h,g};}
+const action=(s,m,k,d={})=>s.action(m.code,m.token,k,{round:s.view(m.code,m.token).round,...d});
+test('로그인 없이 방 생성·참여하고 다른 방의 토큰을 차단한다',()=>{const {store,h,g}=setup();assert.equal(store.view(h.code,g.token).total,2);assert.throws(()=>store.view(h.code,'invalid'),e=>e.status===401);const other=store.create({nickname:'다른 방장',menus});assert.throws(()=>store.view(h.code,other.token),e=>e.status===401);});
+test('방장만 시작할 수 있고 시작 뒤 새 참여는 차단한다',()=>{const {store,h,g}=setup();assert.throws(()=>action(store,g,'start'),e=>e.status===403);action(store,h,'start');assert.throws(()=>store.join(h.code,'늦은 친구'),e=>e.status===409);});
+test('다른 사람의 선택은 공개하지 않고 모두 제출한 뒤 교집합만 계산한다',()=>{const {store,h,g}=setup();action(store,h,'start');action(store,h,'select',{choices:['a','b']});const before=store.view(h.code,g.token);assert.equal(before.result,null);assert.ok(before.members.every(m=>!('choices'in m)&&!('token'in m)));action(store,g,'select',{choices:['b','c']});const after=store.view(h.code,g.token);assert.deepEqual(after.result.commonIds,['b']);assert.deepEqual(after.me.choices,['b','c']);});
+test('빈 선택·후보 밖 메뉴·이전 라운드 요청을 차단한다',()=>{const {store,h}=setup();action(store,h,'start');assert.throws(()=>action(store,h,'select',{choices:[]}),e=>e.status===400);assert.throws(()=>action(store,h,'select',{choices:['bad']}),e=>e.status===400);action(store,h,'reset');assert.throws(()=>store.action(h.code,h.token,'start',{round:1}),e=>e.status===409);});
+test('교집합이 없으면 최다 선택 동점 후보 전체로 새 라운드를 연다',()=>{const {store,h,g}=setup();action(store,h,'start');action(store,h,'select',{choices:['a']});action(store,g,'select',{choices:['b']});assert.deepEqual(store.view(h.code,h.token).result.topIds,['a','b']);action(store,h,'revote');const v=store.view(h.code,g.token);assert.equal(v.round,2);assert.equal(v.phase,'voting');assert.deepEqual(v.menus.map(m=>m.id),['a','b']);assert.equal(v.completed,0);});
+test('룰렛 요청 재전송은 같은 당첨을 유지하고 종료 시 모두 같은 결과를 본다',()=>{let now=10000;const {store,h,g}=setup(()=>now);action(store,h,'start');action(store,h,'select',{choices:['a','b']});action(store,g,'select',{choices:['a','b']});const draw=action(store,h,'draw'),again=action(store,h,'draw');assert.equal(draw.targetId,again.targetId);assert.equal(store.view(h.code,g.token).selectedId,null);now+=3000;assert.equal(store.view(h.code,h.token).selectedId,draw.targetId);assert.equal(store.view(h.code,g.token).selectedId,draw.targetId);});
+test('새로고침·서버 재시작에 필요한 방과 선택 상태를 디스크에 보관한다',()=>{const dir=mkdtempSync(path.join(os.tmpdir(),'lunch-room-'));try{const file=path.join(dir,'rooms.json'),s=new RoomStore(file),h=s.create({nickname:'현서',menus});const reloaded=new RoomStore(file);assert.equal(reloaded.view(h.code,h.token).me.nickname,'현서');}finally{rmSync(dir,{recursive:true,force:true});}});
+test('12명 정원·중복 이름·만료를 검사한다',()=>{let now=100;const {store,h}=setup(()=>now);assert.throws(()=>store.join(h.code,'현서'),e=>e.status===409);for(let i=0;i<10;i++)store.join(h.code,'참여자'+i);assert.throws(()=>store.join(h.code,'초과'),e=>e.status===409);now+=86400001;assert.throws(()=>store.view(h.code,h.token),e=>e.status===410);});

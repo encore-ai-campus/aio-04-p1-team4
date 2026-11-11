@@ -15,6 +15,7 @@ from .config import load_settings
 from .database import Database
 from .locations import router as location_router  # 실제 위치 검색용 라우터를 별도로 연결합니다.
 from .map_routes import router as map_router
+from games.app import create_proxy_router, proxy_lifespan as games_proxy_lifespan
 from .observability import (
     configure_logging,
     request_id_context,
@@ -34,7 +35,8 @@ async def lifespan(application: FastAPI):
     # 로컬 프로토타입에서는 누락된 테이블만 생성합니다. 외부 DB 전환 시 마이그레이션으로 교체합니다.
     await anyio.to_thread.run_sync(application.state.database.init_schema)
     try:
-        yield
+        async with games_proxy_lifespan(application):
+            yield
     finally:
         # 메모리 세션은 개발용이므로 서버 종료 시 참조를 명시적으로 정리한다.
         await application.state.chat_sessions.clear()
@@ -60,6 +62,7 @@ app.state.chat_rate_limiter = InMemoryChatRateLimiter(
 app.include_router(router)
 app.include_router(location_router)  # 추천용 가상 데이터와 위치 검색의 책임을 분리합니다.
 app.include_router(map_router)
+app.include_router(create_proxy_router("/games"), prefix="/games", tags=["games"])
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

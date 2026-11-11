@@ -69,11 +69,11 @@ def normalize_route(data):
     return dict(distance=distance, duration=duration, paths=paths, steps=steps)
 
 
-def walking_route(body, root, opener=urllib.request.urlopen):
+def walking_route(body, root, opener=urllib.request.urlopen, *, api_key=None):
     start = point(body.get('origin'))
     end = point(body.get('destination'))
     env = read_env(root)
-    key = env.get('KAKAO_REST_API_KEY') or env.get('KAKAO_REST_KEY')
+    key = api_key or env.get('KAKAO_REST_API_KEY') or env.get('KAKAO_REST_KEY') or env.get('MAP_API_KEY')
     if not key:
         raise RouteError('도보 길찾기 연결 설정이 필요해요. 카카오맵에서 길찾기를 이용해주세요.', 503)
     query = urllib.parse.urlencode(dict(start_x=start[1], start_y=start[0], end_x=end[1], end_y=end[0], input_coord='WGS84', output_coord='WGS84'))

@@ -6,7 +6,7 @@ import urllib.parse
 from walk_routes import RouteError, walking_route
 
 HERE = pathlib.Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
+ROOT = HERE.parent
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):

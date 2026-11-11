@@ -389,7 +389,7 @@ async function loadWalkingRoute(restaurant,section,note,button,force=false){
     let cached=walkingCache.get(key),result;
     if(!force&&cached&&Date.now()-cached.at<300000)result=cached.result;
     else{
-      const response=await fetch('/api/walking-route',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({origin,destination}),signal:controller.signal});
+      const response=await fetch('api/walking-route',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({origin,destination}),signal:controller.signal});
       const body=await response.json().catch(()=>null);
       if(!response.ok)throw new Error(body?.error||'도보 경로를 불러오지 못했어요. 개발 서버에서 다시 시도해주세요.');
       result=body;
@@ -831,7 +831,7 @@ updateRadiusControls();
 renderRestaurants();
 select(selectedId);
 if (location.protocol !== 'file:') {
-  fetch('/config.json').then(r=>r.ok?r.json():{}).then(config=>{
+  fetch('config.json').then(r=>r.ok?r.json():{}).then(config=>{
     if(config.javascriptKey) loadKakao(config.javascriptKey).catch(()=>{
       document.getElementById('map-hint').textContent = '카카오맵 연결 설정을 확인해주세요. 현재는 핀 동작 예시입니다.';
     });

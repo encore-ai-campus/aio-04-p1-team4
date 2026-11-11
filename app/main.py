@@ -14,6 +14,7 @@ from .chat_sessions import InMemoryChatSessionStore
 from .config import load_settings
 from .database import Database
 from .locations import router as location_router  # 실제 위치 검색용 라우터를 별도로 연결합니다.
+from .map_routes import router as map_router
 from .observability import (
     configure_logging,
     request_id_context,
@@ -58,6 +59,7 @@ app.state.chat_rate_limiter = InMemoryChatRateLimiter(
 )
 app.include_router(router)
 app.include_router(location_router)  # 추천용 가상 데이터와 위치 검색의 책임을 분리합니다.
+app.include_router(map_router)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

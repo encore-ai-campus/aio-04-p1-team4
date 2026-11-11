@@ -167,11 +167,16 @@ GROQ_MODEL=openai/gpt-oss-20b
 | 주소 | 용도 |
 |---|---|
 | `http://127.0.0.1:8000` | 사용자 화면 |
+| `http://127.0.0.1:8000/map` | kakao-map 폴더의 카카오 지도·메뉴 검색 화면 |
 | `http://127.0.0.1:8000/docs` | FastAPI 자동 API 문서 |
 | `http://127.0.0.1:8000/api/health` | 프로세스 생존 확인 |
 | `http://127.0.0.1:8000/api/readiness?refresh=true` | DB·활성 메뉴·Chromium 설치파일·키 설정 확인 |
 
 readiness는 외부 API 인증 성공이나 실제 브라우저 실행 성공까지 확인하지 않습니다. 실제 식당 검색과 채팅으로 별도 검증해야 합니다.
+
+지도는 별도 `serve.py` 실행 없이 같은 FastAPI 서버의 `/map`에서 열 수 있습니다.
+`KAKAO_JAVASCRIPT_KEY`는 지도 SDK에, 기존 `MAP_API_KEY`는 서버 측 도보 경로 요청에 사용합니다.
+지도 설정(`/map/config.json`)에는 공개 JavaScript 키만 반환합니다.
 
 ### 5. 사용 예시
 

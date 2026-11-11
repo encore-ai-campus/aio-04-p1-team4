@@ -121,7 +121,15 @@ def index():
     return FileResponse(STATIC / "index.html")
 
 
+@app.get("/config.json", include_in_schema=False)
+def frontend_config():
+    return JSONResponse({"apiBase": ""}, headers={"Cache-Control": "no-store"})
+
+
 # 브라우저에 공개해도 되는 JavaScript 키만 반환합니다. 전체 설정이나 REST/Groq 키는 반환하지 않습니다.
 @app.get("/api/public-config", include_in_schema=False)
 def public_config():
     return {"kakaoJavascriptKey": app.state.settings.kakao_javascript_key}
+
+
+app.mount("/", StaticFiles(directory=STATIC), name="frontend")

@@ -1,0 +1,110 @@
+[
+  {
+    "page": 1,
+    "file": "01-conditions.png",
+    "stage": "조건 설정",
+    "description": "PDF page1 is content authority. 2x2 fields 예산설정 12,000원, 남은 점심시간 50분, 거리설정 500m, 인원 수 설정 1명. Six category pills 전체 한식 일식 중식 양식 샐러드. All active for 1 person. Note 다인 이용 시 음식 카테고리 선택이 비활성화됩니다. Two CTAs 게임으로 메뉴 고르기 / AI에게 추천받기. Do not preserve obsolete 800m/60분 from style ref. Location only in header as PDF."
+  },
+  {
+    "page": 2,
+    "file": "02-budget.png",
+    "stage": "조건 설정",
+    "description": "Budget setting full screen, 예산설정 with minus 12,000원 plus and long elegant slider. Keep sparse spacious composition."
+  },
+  {
+    "page": 3,
+    "file": "03-end-time.png",
+    "stage": "조건 설정",
+    "description": "종료 시간 설정 with minus 12 시 30 분 plus, minimal time picker. Do not invent AM/PM if absent."
+  },
+  {
+    "page": 4,
+    "file": "04-people.png",
+    "stage": "조건 설정",
+    "description": "인원 수 설정 with minus 1명 plus and slider. Minimal spacious field detail."
+  },
+  {
+    "page": 5,
+    "file": "05-distance.png",
+    "stage": "조건 설정",
+    "description": "거리설정 with minus 500m plus and slider. Max 2km. Minimal spacious field detail."
+  },
+  {
+    "page": 6,
+    "file": "06-solo-games.png",
+    "stage": "메뉴 결정",
+    "description": "혼자서 가볍게 골라요; four refined cards in 2x2: 제비뽑기, 가챠, 행운권 뽑기, 랜덤게임. Short captions 선택하면 즉시 추첨 시작 on first three, 혼자 게임 중 하나를 자동 선택 on random. Footer actions 조건 변경 / AI 추천."
+  },
+  {
+    "page": 7,
+    "file": "07-draw.png",
+    "stage": "메뉴 결정",
+    "description": "점심 메뉴를 뽑고 있어요. Elegant original lottery stick drawing visual, instruction 뽑아 주세요, button 랜덤뽑기. 음식 메뉴만 추첨, no restaurant results."
+  },
+  {
+    "page": 8,
+    "file": "08-gacha.png",
+    "stage": "메뉴 결정",
+    "description": "점심 메뉴를 뽑고 있어요. Refined orange capsule toy machine visual centered, question mark capsule, 돌려주세요, button 돌리기. Food menu only."
+  },
+  {
+    "page": 9,
+    "file": "09-ticket.png",
+    "stage": "메뉴 결정",
+    "description": "점심 메뉴를 뽑고 있어요. Elegant perforated lucky ticket graphic, instruction 좌/우로 넘기며 선택 후 뜯어 주세요, button 뜯기. Food menu only."
+  },
+  {
+    "page": 10,
+    "file": "10-random-game.png",
+    "stage": "메뉴 결정",
+    "description": "점심 메뉴를 뽑고 있어요. Refined small question-mark game chooser card, 시작해주세요, helper 랜덤게임으로 게임이 우선 선택 됩니다., button 스타트."
+  },
+  {
+    "page": 11,
+    "file": "11-group-games.png",
+    "stage": "메뉴 결정",
+    "description": "함께 먹을 메뉴를 골라요. Summary 12,000원 / 50분 남음 / 500m / 4명. Two refined game cards 룰렛 · 2~12명, 사다리 · 2~8명. Each 선택하면 즉시 추첨 시작. Note 9~12명: 사다리 비활성화. Small 참가 인원과 메뉴 배정 규칙은 추가 확정 필요. Footer 조건 변경 / AI 추천."
+  },
+  {
+    "page": 12,
+    "file": "12-group-input.png",
+    "stage": "메뉴 결정",
+    "description": "각자의 메뉴를 입력해주세요. Four rows 사용자 1 피자, 사용자 2 김치찌개, 사용자 3 짜장면, 사용자 4 볶음밥. Group summary 4명. Clean editable fields, do not invent extra transitions."
+  },
+  {
+    "page": 13,
+    "file": "13-roulette.png",
+    "stage": "메뉴 결정",
+    "description": "점심 메뉴를 뽑고 있어요. Group summary 4명. A restrained orange/navy/pale blue roulette wheel with 4 readable food sectors 짜장면 피자 볶음밥 김치찌개, heading 멈춰 주세요, button 멈춰. Food menu only."
+  },
+  {
+    "page": 14,
+    "file": "14-ladder.png",
+    "stage": "메뉴 결정",
+    "description": "점심 메뉴를 뽑고 있어요. Group summary 4명. 번호를 선택해주세요. Four selectable participant numbers, clean 4-column ladder diagram with food endpoints 피자 짜장면 김치찌개 볶음밥. Question mark marker. Gray disabled 출발 button. Note 번호를 전부 선택 후 출발 버튼이 활성화 됩니다."
+  },
+  {
+    "page": 15,
+    "file": "15-ai-input.png",
+    "stage": "메뉴 결정",
+    "description": "지금 나에게 맞는 메뉴. Summary 12,000원 / 50분 남음 / 500m / 1명 / 전체. Textarea heading 날씨·기온·컨디션을 알려주세요; placeholder 오늘은 쌀쌀하고 조금 피곤해요. 따뜻한 국물이 먹고 싶어요. Small 직접 입력 · 자동 날씨 연동은 미확정. Manual weather input is design proposal. 로컬 AI 사용. Actions 뒤로 / 메뉴 추천받기."
+  },
+  {
+    "page": 16,
+    "file": "16-menu-result.png",
+    "stage": "메뉴 결정",
+    "description": "오늘의 점심 메뉴. Summary 1명. Central restrained result card 선택된 음식 메뉴 김치찌개. 식당은 다음 단계에서 선택합니다. 게임 / AI 결과 공통 화면. Actions 한번더 / OK · 식당 탐색. Show food name ONLY, no price/restaurant/map."
+  },
+  {
+    "page": 17,
+    "file": "17-restaurants.png",
+    "stage": "식당 선택",
+    "description": "이 메뉴를 먹을 수 있는 곳. Left two restaurant cards A 점심식당 · 선택됨 김치찌개 9,000원 450m · 도보 7분; B 골목식당 김치찌개 10,000원 · 620m. Right large light schematic street map with matching A and B pins and 현재 위치. Selected A orange/navy. Helper 후보 없음 → 조건 변경 / 메뉴 재선택. Actions 식당 랜덤 / OK · 경로 확인. Map is fictional schematic no real map branding."
+  },
+  {
+    "page": 18,
+    "file": "18-route.png",
+    "stage": "경로 확인",
+    "description": "선택한 식당으로 출발. Three compact summary metrics 도착예상 12:37 / 총소요예상 7분 / 총거리 450m. Large schematic street map with orange walking route from 현재 위치 to A 점심식당. Helper 현재 위치 → 점심식당 / 편도 도보 예상 · 예시. Action 다른 식당 선택. Small 총소요시간은 편도 도보로 표현한 제안이며 대기·식사·왕복 포함 여부 미확정."
+  }
+]

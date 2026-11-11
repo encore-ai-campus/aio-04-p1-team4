@@ -10,6 +10,22 @@ const button=(label,action,cls='')=>`<button class="${cls}" data-action="${actio
 function payload(){return{budget:Number(state.budget),remaining_minutes:remainingLunch(),lunch_end_time:state.end_time,distance_m:Number(state.distance_m),people:Number(state.people),origin:state.origin,menu:state.menu,game:state.game,context:state.context,participant_menus:state.participant_menus,category:state.people>1?'전체':state.category,restaurants:undefined,selected:undefined,route:undefined};}
 function invalidate(){state.menu=null;state.restaurants=[];state.selected=null;state.route=null;}
 function go(r,gameSource=null){
+ if(r==='backend-games'){
+  try{
+   sessionStorage.setItem('lunchrun-games-settings',JSON.stringify({
+    budget:Number(state.budget),
+    time:remainingLunch(),
+    distance:Number(state.distance_m),
+    people:Number(state.people),
+    categories:state.category==='전체'?[]:[state.category],
+    origin:state.origin
+   }));
+  }catch{
+   $('#status').textContent='게임에 조건을 전달하지 못했습니다. 브라우저 저장소 사용을 확인해주세요.';
+   return;
+  }
+  location.assign('/games/');return;
+ }
  if(["games","group-input","play"].includes(r)&&state.people>12){$("#status").textContent="12명 초과시 게임추천 서비스는 사용 할 수 없습니다.";return;}
  const current=location.hash.slice(1)||'conditions';
  const expands=current==='conditions'&&['budget','time','distance','people'].includes(r);
@@ -28,7 +44,7 @@ function go(r,gameSource=null){
 
 async function run(fn){if(busy)return;busy=true;$('#status').textContent='처리 중…';try{await fn();$('#status').textContent='';}catch(e){$('#status').textContent=e.name==='AbortError'?'요청 시간이 초과되었습니다. 다시 시도해주세요.':e.message;}finally{busy=false;}}
 function render(){const r=location.hash.slice(1)||'conditions';const app=document.querySelector('.app'),previous=app.dataset.view;app.dataset.view=r;if(r!=='games')$('#dock').classList.remove('dock-enter');else if(previous!=='games')$('#dock').classList.add('dock-enter');let stage=['conditions','budget','time','end-time','people','distance'].includes(r)?0:r==='restaurants'?2:r==='route'?3:1;$('#dock').innerHTML=stages.map((s,i)=>button(s,'go:'+routes[i],i===stage?'active':'')).join('');$('#summary').textContent=stage?`${state.budget.toLocaleString()}원 / ${remainingLunch()}분 남음 / ${state.distance_m}m / ${state.people}명${state.people===1?' / '+state.category:''}`:'';let title='오늘 점심, 어떻게 고를까요?',html='';
-if(r==='conditions'){html='<div class="grid">'+[['예산설정','budget',state.budget.toLocaleString()+'원'],['남은시간','time',remainingLunch()+'분'],['거리설정','distance',state.distance_m+'m'],['인원 수 설정','people',state.people+'명']].map(([l,p,v])=>`<div class="field">${l}${button(v,'go:'+p,'card')}</div>`).join('')+'</div><p class="category-label">음식 카테고리</p><div class="chips">'+['전체','한식','일식','중식','양식','샐러드'].map(c=>`<button data-category="${c}" ${state.people>1?'disabled':''} class="${c===state.category?'active':''}">${c}</button>`).join('')+'</div><p class="notice">다인 이용 시 음식 카테고리 선택이 비활성화됩니다.</p><div class="actions">'+(state.people>12?'<button class="primary" disabled>게임으로 메뉴 고르기</button>':button('게임으로 메뉴 고르기','go:games','primary'))+button('AI에게 추천받기','go:ai')+'</div>';}
+if(r==='conditions'){html='<div class="grid">'+[['예산설정','budget',state.budget.toLocaleString()+'원'],['남은시간','time',remainingLunch()+'분'],['거리설정','distance',state.distance_m+'m'],['인원 수 설정','people',state.people+'명']].map(([l,p,v])=>`<div class="field">${l}${button(v,'go:'+p,'card')}</div>`).join('')+'</div><p class="category-label">음식 카테고리</p><div class="chips">'+['전체','한식','일식','중식','양식','샐러드'].map(c=>`<button data-category="${c}" ${state.people>1?'disabled':''} class="${c===state.category?'active':''}">${c}</button>`).join('')+'</div><p class="notice">다인 이용 시 음식 카테고리 선택이 비활성화됩니다.</p><div class="actions">'+(state.people>12?'<button class="primary" disabled>게임으로 메뉴 고르기</button>':button('게임으로 메뉴 고르기','go:backend-games','primary'))+button('AI에게 추천받기','go:ai')+'</div>';}
 else if(r==='budget'){html='<div class="setting"><p>예산설정</p><div class="value">'+button('−','money:-1000')+'<label class="money-field"><input id="budget-input" aria-label="예산 금액" inputmode="numeric" type="text" value="'+state.budget.toLocaleString('ko-KR')+'" autocomplete="off"><span>원</span></label>'+button('+','money:1000')+'</div></div><div class="actions">'+button('적용','apply-budget','primary')+'</div>';}
 else if(r==='time'||r==='end-time'){const [hour,minute]=state.end_time.split(':').map(Number);html='<div class="setting"><p>점심 종료 시간</p><div class="value time-value">'+button('−','clock:-10')+'<div class="time-fields"><select id="period" aria-label="오전 오후"><option value="AM" '+(hour<12?'selected':'')+'>AM</option><option value="PM" '+(hour>=12?'selected':'')+'>PM</option></select><label><input id="end-hour" aria-label="종료 시" type="number" min="1" max="12" value="'+(hour%12||12)+'"><span>시</span></label><label><input id="end-minute" aria-label="종료 분" type="number" min="0" max="59" value="'+String(minute).padStart(2,'0')+'"><span>분</span></label></div>'+button('+','clock:10')+'</div><p class="input-hint">− / + 버튼으로 10분씩 조정합니다.</p></div><div class="actions">'+button('적용','apply-time','primary')+'</div>';}
 else if(r==='people'){html='<div class="setting"><p>인원 수 설정</p><div class="value">'+button('−','people-step:-1')+'<label class="people-field"><input id="people-input" aria-label="인원 수" aria-describedby="people-warning" type="number" min="1" step="1" value="'+state.people+'"><span>명</span></label>'+button('+','people-step:1')+'</div><p id="people-warning" class="people-warning" role="status" '+(state.people>12?'':'hidden')+'>12명 초과시 게임추천 서비스는 사용 할 수 없습니다.</p></div><div class="actions">'+button('적용','apply-people','primary')+'</div>';}

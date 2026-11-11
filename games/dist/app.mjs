@@ -8,11 +8,42 @@ const won = (n) => n.toLocaleString('ko-KR');
 const total = (m) => Math.ceil(m.distance / 70) * 2 + m.meal + m.wait;
 const delay = (n) => new Promise(r => setTimeout(r, matchMedia('(prefers-reduced-motion: reduce)').matches ? 60 : n));
 const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
+function takeLaunchSettings(){
+  try{
+    const raw=sessionStorage.getItem('lunchrun-games-settings');
+    if(!raw)return {settings:{},warning:''};
+    sessionStorage.removeItem('lunchrun-games-settings');
+    const value=JSON.parse(raw);
+    if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('invalid settings');
+    const settings={},warnings=[];
+    const number=(key,min,max)=>{
+      if(value[key]===undefined)return;
+      const n=Number(value[key]);
+      if(!Number.isFinite(n)||n<min||n>max)warnings.push(key);
+      else settings[key]=n;
+    };
+    number('budget',0,100000000);
+    number('time',0,180);
+    number('distance',0,1000);
+    number('people',1,12);
+    if(Array.isArray(value.categories)&&value.categories.every(c=>['한식','일식','중식','양식','분식','아시안','샐러드'].includes(c)))settings.categories=value.categories;
+    else if(value.categories!==undefined)warnings.push('categories');
+    if(value.origin!==null&&value.origin!==undefined){
+      const {latitude,longitude}=value.origin;
+      if(Number.isFinite(latitude)&&latitude>=-90&&latitude<=90&&Number.isFinite(longitude)&&longitude>=-180&&longitude<=180)settings.origin=[latitude,longitude];
+      else warnings.push('origin');
+    }
+    return {settings,warning:warnings.length?'일부 전달된 조건을 사용할 수 없어 기본값으로 설정했어요.':''};
+  }catch{
+    return {settings:{},warning:'전달된 조건을 읽지 못해 게임 기본값으로 설정했어요.'};
+  }
+}
 const prefs = read('lunchrun-demo2', {});
+const launch = takeLaunchSettings();
 const state = {
-  view:'game', mode:'group', game:'intersection', budget:12000, time:45, distance:500, categories:[], people:1,
+  view:'game', mode:'group', game:'intersection', budget:launch.settings.budget??12000, time:launch.settings.time??45, distance:launch.settings.distance??500, categories:launch.settings.categories??[], people:launch.settings.people??1,
   names:Array.from({length:12}, (_,i)=>i === 0 ? '나' : `팀원 ${i+1}`), favorites:Array.isArray(prefs.favorites)?prefs.favorites:[],
-  blacklist:Array.isArray(prefs.blacklist)?prefs.blacklist:[], profile:typeof prefs.profile==='string'?prefs.profile:'', location:'독산역', result:null,
+  blacklist:Array.isArray(prefs.blacklist)?prefs.blacklist:[], profile:typeof prefs.profile==='string'?prefs.profile:'', location:launch.settings.origin?'현재 위치':'독산역', origin:launch.settings.origin??null, result:null,
   pending:null, previous:null, busy:false, ladder:null, ladderStart:0, selectedRestaurant:0, route:false, aiReady:false, aiPrompt:'', aiNotes:[], restaurantCandidates:null, restaurantDrawing:false, restaurantDrawDone:false, restaurantSpotlight:-1
 };
 const games = {
@@ -46,7 +77,9 @@ function updateProgress(){
 }
 function syncFilters(){
   const budgetMin=Math.min(5000,state.budget),budgetMax=Math.max(20000,state.budget);$('#budget').min=budgetMin;$('#budget').max=budgetMax;$('#budget').step=state.budget%1000===0?1000:1;
-  $('#budget').value=state.budget; $('#budget-value').textContent=won(state.budget); $('#distance').value=String(state.distance); $('#people-count').textContent=state.people;$('#lunch-time').value=state.time;$('#time-value').textContent=state.time;$('#distance-value').textContent=state.distance;$('#lunch-time').style.setProperty('background',`linear-gradient(to right,#FF641B ${(state.time-10)/80*100}%,#DDE4ED ${(state.time-10)/80*100}%)`);$('#distance').style.setProperty('background',`linear-gradient(to right,#FF641B ${(state.distance-100)/900*100}%,#DDE4ED ${(state.distance-100)/900*100}%)`);
+  $('#budget').value=state.budget; $('#budget-value').textContent=won(state.budget); $('#distance').value=String(state.distance); $('#people-count').textContent=state.people;$('#lunch-time').value=state.time;$('#time-value').textContent=state.time;$('#distance-value').textContent=state.distance;$('#lunch-time').style.setProperty('background',`linear-gradient(to right,#FF641B ${state.time/180*100}%,#DDE4ED ${100-state.time/180*100}%)`);$('#distance').style.setProperty('background',`linear-gradient(to right,#FF641B ${state.distance/1000*100}%,#DDE4ED ${100-state.distance/1000*100}%)`);
+  if(state.origin&&!$('#location option[data-current-location]'))$('#location').insertAdjacentHTML('beforeend','<option data-current-location value="현재 위치">현재 위치</option>');
+  $('#location').value=state.origin?'현재 위치':state.location;
   $$('.range-ends span').forEach((e,i)=>e.textContent=won(i?budgetMax:budgetMin)+'원');
   $('#budget').style.setProperty('--range-progress',`${(state.budget-budgetMin)/(budgetMax-budgetMin)*100}%`);
   const timeOptions=$('#time-options'); const custom=timeOptions.querySelector('[data-custom]'); if(custom)custom.remove();
@@ -76,7 +109,7 @@ function renderGame(pool){
   document.body.classList.toggle('intersection-mode',state.mode==='group'&&state.game==='intersection');
   if(state.mode==='group'&&state.game==='intersection'){
     group.hidden=true;$('#game-badge').textContent='OUR INTERSECTION · DEMO 3';$('#board-status').textContent='NICKNAME ONLY';$('#game-actions').innerHTML='';$('#game-footnote').textContent='방의 점심 조건은 생성 시 고정돼요. 각자 다른 휴대폰에서 메뉴를 선택해 보세요.';
-    mountRoomFlow($('#game-stage'),{getFilters:()=>({location:state.location,budget:state.budget,time:state.time,distance:state.distance,categories:[...state.categories]}),onChoose:(id,filters,people)=>{const m=filterMenus(filters).find(m=>m.id===id);if(!m){toast('현재 CSV에서 이 메뉴의 식당을 찾지 못했어요.');return;}Object.assign(state,filters);state.people=people||state.people;state.mode='solo';state.game='gacha';syncFilters();finish(m);switchView('restaurants');}});return;
+    mountRoomFlow($('#game-stage'),{getFilters:()=>({location:state.location,origin:state.origin,budget:state.budget,time:state.time,distance:state.distance,categories:[...state.categories]}),onChoose:(id,filters,people)=>{const m=filterMenus(filters).find(m=>m.id===id);if(!m){toast('현재 CSV에서 이 메뉴의 식당을 찾지 못했어요.');return;}Object.assign(state,filters);state.people=people||state.people;state.mode='solo';state.game='gacha';syncFilters();finish(m);switchView('restaurants');}});return;
   }
   closeRoomFlow();
 
@@ -207,7 +240,7 @@ $('#lunch-time').addEventListener('input',e=>{if(state.busy)return;state.time=Nu
 $('#filters-form').addEventListener('submit',e=>e.preventDefault());
 $('#budget').addEventListener('input',e=>{if(state.busy)return;state.budget=Number(e.target.value);conditionsChanged();});
 $('#distance').addEventListener('input',e=>{if(state.busy)return;state.distance=Number(e.target.value);conditionsChanged();});
-$('#location').addEventListener('change',e=>{if(state.busy)return;state.location=e.target.value;conditionsChanged();});
+$('#location').addEventListener('change',e=>{if(state.busy)return;state.location=e.target.value;state.origin=null;conditionsChanged();});
 $('#profile-btn').addEventListener('click',profileDialog);
 $('#close-dialog').addEventListener('click',()=>$('#app-dialog').close());
 $('#app-dialog').addEventListener('click',e=>{if(e.target===$('#app-dialog'))$('#app-dialog').close();});
@@ -248,4 +281,4 @@ document.addEventListener('click', async e=>{
   if(action==='login'){const name=$('#nickname').value.trim();if(!name){toast('사용할 닉네임을 입력해 주세요.');return;}state.profile=name;state.names[0]=name;persist();$('#app-dialog').close();render();toast(`${name}님, 오늘도 맛있는 점심 되세요!`);}
   if(action==='logout'){state.profile='';state.names[0]='나';persist();$('#app-dialog').close();render();toast('게스트 모드로 전환했어요. 취향은 이 브라우저에 유지돼요.');}
 });
-updateProfile();syncFilters();render();
+updateProfile();syncFilters();render();if(launch.warning)toast(launch.warning);

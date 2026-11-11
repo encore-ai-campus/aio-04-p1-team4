@@ -10,6 +10,8 @@ Node.js와 Python이 설치된 환경에서 `python -m pip install -r requiremen
 
 `app.main:app`의 `/games` 경로는 게임 요청을 Node.js 앱으로 전달합니다. 두 서버를 별도 터미널에서 실행하고 http://127.0.0.1:8000/games/ 에 접속하세요. FastAPI는 기본적으로 8000 포트, Node.js는 내부 연결용 4174 포트를 사용합니다. `/games`도 `/games/`로 자동 이동합니다. `games/app.py`는 기존처럼 독립 FastAPI 프록시로도 실행할 수 있으며, 이 경우 `/game/`을 사용합니다.
 
+LunchRun 메인 화면에서 게임으로 이동하면 예산, 남은 시간, 거리, 인원, 카테고리와 현재 위치가 같은 브라우저 탭의 세션 저장소로 전달됩니다. 게임의 메뉴 후보와 모임방은 이 값을 사용하며, 위치 좌표는 주소에 포함되지 않습니다.
+
 PowerShell 터미널 1:
 
 ```powershell

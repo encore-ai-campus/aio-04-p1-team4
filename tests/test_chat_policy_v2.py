@@ -25,9 +25,9 @@ RESTAURANT_IDS = {"restaurant-1", "restaurant-2"}
 
 
 def test_v2_files_and_examples_follow_latest_contract():
-    assert SYSTEM_PROMPT_FILE.name == "system_v2.txt"
-    # 의도 스키마는 v2를 유지하고, DB 후속답변 적용 후 안내문만 v3가 최신이다.
-    assert REPLIES_FILE.name == "replies_v3.json"
+    # 삭제한 채식·맵기 필터를 제안하지 않는 최신 프롬프트만 사용한다.
+    assert SYSTEM_PROMPT_FILE.name == "system_v4.txt"
+    assert REPLIES_FILE.name == "replies_v4.json"
     assert "restaurant" in load_replies()
     examples = json.loads(EXAMPLES_FILE.read_text(encoding="utf-8"))
     for example in examples:
@@ -37,6 +37,16 @@ def test_v2_files_and_examples_follow_latest_contract():
             RESTAURANT_IDS,
         )
         assert parsed.intent == example["expected"]["intent"]
+
+
+def test_removed_diet_and_spicy_conditions_are_rejected():
+    # 화면에서 삭제한 조건이 모델의 변경안으로 다시 들어오지 않게 한다.
+    for patch in ({"diet": "vegan"}, {"spicy": False}):
+        with pytest.raises(ValidationError):
+            parse_interpretation(
+                json.dumps({"intent": "change_conditions", "condition_patch": patch}),
+                MENU_IDS,
+            )
 
 
 def test_new_intents_require_known_targets_and_matching_fields():

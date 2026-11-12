@@ -190,3 +190,21 @@ def test_unknown_holiday_is_recommended_with_warning(tmp_path: Path):
         assert result.restaurants[0]["warnings"] == ["휴무일 확인 필요"]
     finally:
         database.dispose()
+
+
+def test_industry_mapping_filters_search_results(tmp_path: Path):
+    database = database_for(tmp_path)
+    try:
+        with database.session_factory.begin() as session:
+            add_restaurant(session, "chinese")
+            wrong = add_restaurant(session, "korean")
+            wrong.cuisine = "한식"
+        with database.session_factory() as session:
+            result = filter_recommendation_candidates(
+                session, raw("chinese", "korean"), "짜장면", 10000,
+                cuisine="중식", now=datetime(2026, 11, 9, 12, tzinfo=KST),
+            )
+        assert [item["id"] for item in result.restaurants] == ["chinese"]
+        assert result.excluded == {"cuisine_mismatch": 1}
+    finally:
+        database.dispose()

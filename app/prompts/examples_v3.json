@@ -1,0 +1,120 @@
+[
+  {
+    "question": "점심 메뉴 골라줘",
+    "expected": {
+      "intent": "recommend_menu",
+      "condition_patch": {}
+    }
+  },
+  {
+    "question": "다른 메뉴 추천해줘",
+    "expected": {
+      "intent": "reroll_menu",
+      "condition_patch": {}
+    }
+  },
+  {
+    "question": "짜장면 식당 보여줘",
+    "expected": {
+      "intent": "search_restaurants",
+      "menu_id": "noodle",
+      "condition_patch": {}
+    }
+  },
+  {
+    "question": "이 메뉴는 어떤 음식이야?",
+    "selected_menu_id": "bibimbap",
+    "expected": {
+      "intent": "ask_menu_detail",
+      "menu_id": "bibimbap",
+      "condition_patch": {}
+    }
+  },
+  {
+    "question": "첫 번째 식당 가격은?",
+    "recent_restaurants": [
+      {
+        "id": "restaurant-1",
+        "name": "예시 식당"
+      }
+    ],
+    "expected": {
+      "intent": "ask_restaurant_detail",
+      "restaurant_id": "restaurant-1",
+      "requested_detail": "price",
+      "condition_patch": {}
+    }
+  },
+  {
+    "question": "한식으로 바꾸고 식당도 찾아줘",
+    "expected": {
+      "intent": "change_conditions",
+      "condition_patch": {
+        "cuisine": "한식"
+      },
+      "search_after_change": true
+    }
+  },
+  {
+    "question": "반경을 줄여줘",
+    "expected": {
+      "intent": "clarify",
+      "condition_patch": {},
+      "clarification_kind": "radius"
+    }
+  },
+  {
+    "question": "300m",
+    "pending_action": {
+      "kind": "change_radius",
+      "current_value": 500
+    },
+    "expected": {
+      "intent": "change_conditions",
+      "condition_patch": {
+        "radius_m": 300
+      }
+    }
+  },
+  {
+    "question": "거기 가격은?",
+    "recent_restaurants": [
+      {
+        "id": "restaurant-1",
+        "name": "첫 식당"
+      },
+      {
+        "id": "restaurant-2",
+        "name": "둘째 식당"
+      }
+    ],
+    "expected": {
+      "intent": "clarify",
+      "condition_patch": {},
+      "clarification_kind": "restaurant"
+    }
+  },
+  {
+    "question": "오늘 날씨 알려줘",
+    "expected": {
+      "intent": "out_of_scope",
+      "condition_patch": {}
+    }
+  },
+  {
+    "question": "맵지 않은 음식으로 바꿔줘",
+    "expected": {
+      "intent": "clarify",
+      "clarification_kind": "unsupported",
+      "condition_patch": {}
+    }
+  },
+  {
+    "question": "완전 채식으로 바꿔줘",
+    "expected": {
+      "intent": "clarify",
+      "clarification_kind": "unsupported",
+      "condition_patch": {}
+    }
+  }
+]

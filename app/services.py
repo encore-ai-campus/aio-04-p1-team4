@@ -25,9 +25,10 @@ from .recommendation_engine import (
     filter_recommendation_candidates,
 )
 from .repositories import save_restaurants
+from .food_types import catalog_food_type
 
-# 현재 DB에 없는 채식·맵기·총소요시간은 검증하지 않으므로 범위를 명확히 알린다.
-CANDIDATE_NOTICE = "메뉴·가격·현재 영업 여부를 확인한 결과입니다. 채식·맵기·총소요시간은 아직 확인하지 않습니다."
+# 음식 조건에서 제거한 항목 대신 현재 확인하는 데이터와 소요시간 한계만 안내한다.
+CANDIDATE_NOTICE = "메뉴·가격·현재 영업 여부를 확인한 결과입니다. 총소요시간은 아직 확인하지 않습니다."
 ProgressCallback = Callable[[dict], Awaitable[None]]
 logger = logging.getLogger("lunchrun.services")
 
@@ -60,7 +61,7 @@ def _catalog_payload(catalog: MenuCatalog) -> dict:
     return {
         "id": catalog.id,
         "name": catalog.name,
-        "cuisine": catalog.cuisine,
+        "cuisine": catalog_food_type(catalog.cuisine),
         "description": catalog.description,
         "search_keyword": catalog.search_keyword,
     }
@@ -84,6 +85,7 @@ def _filter_with_database(
     menu_name: str,
     budget: int,
     menu_aliases: list[str],
+    cuisine: str,
 ):
     """상세 수집이 끝난 뒤 새 세션에서 최신 DB 값으로 추천을 판정한다."""
 
@@ -94,6 +96,7 @@ def _filter_with_database(
             menu_name,
             budget,
             menu_aliases=menu_aliases,
+            cuisine=cuisine,
         )
 
 
@@ -179,11 +182,15 @@ async def recommend(conditions: Conditions, location: SelectedLocation, radius_m
     aliases = [alias.name for alias in catalog.aliases] if catalog else []
     # 표시명과 검색어를 분리해 카카오에는 DB에 관리하는 search_keyword만 보낸다.
     await _emit(progress, "searching", "주변 식당을 검색하고 있어요.")
+    search_options = {}
+    if conditions.cuisine == "카페/빵" or selected_model.cuisine == "카페/빵":
+        search_options["category_group_code"] = "CE7"
     found = await client.search_restaurants(
         selected_model.search_keyword,
         location.lat,
         location.lng,
         radius_m=radius_m,
+        **search_options,
     )
     logger.info(
         "restaurant_search_completed",
@@ -227,6 +234,7 @@ async def recommend(conditions: Conditions, location: SelectedLocation, radius_m
             selected_model.name,
             conditions.budget,
             aliases,
+            conditions.cuisine,
         )
         result["restaurants"] = filtered.restaurants
         result["candidate_restaurants"] = filtered.candidate_restaurants
@@ -523,7 +531,7 @@ async def chat(message: str, conditions: Conditions, menu_id: str | None, locati
         )
         # 추천 답변은 서버 카탈로그와 확정 조건만 사용해 중복 경고를 줄입니다.
         summary = (f"적용 조건: 반경 {radius_m}m · 예산 {conditions.budget:,}원 이하 · {conditions.cuisine} · "
-                   f"점심시간 {conditions.minutes}분 · 채식·맵기 조건 미적용")
+                   f"점심시간 {conditions.minutes}분")
         has_places = result["restaurants"] or result.get("candidate_restaurants")
         text = (f"추천 메뉴: {result['menu']['name']}\n{summary}\n"
                 f"추천 식당: {len(result['restaurants'])}곳 · 확인 필요 후보: "

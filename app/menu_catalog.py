@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from .database.models import MenuCatalog, Restaurant
+from .food_types import FOOD_TYPE_MAPPING, catalog_food_type, matches_food_type
 
 
 class ChoiceSource(Protocol):
@@ -71,7 +72,7 @@ def _validate(latitude: float, longitude: float, radius_m: int, budget: int, cui
         raise ValueError("검색 반경은 50~500m 정수여야 합니다.")
     if type(budget) is not int or not 1000 <= budget <= 100000:
         raise ValueError("예산은 1,000~100,000원 정수여야 합니다.")
-    if cuisine not in {"전체", "한식", "중식", "일식", "양식", "샐러드"}:
+    if cuisine not in FOOD_TYPE_MAPPING:
         raise ValueError("지원하는 음식 종류를 확인해 주세요.")
 
 
@@ -110,7 +111,7 @@ def menu_candidates(
     )
     catalogs = [
         item for item in catalogs
-        if item.id not in excluded and (cuisine == "전체" or item.cuisine == cuisine)
+        if item.id not in excluded
     ]
     if not catalogs:
         return []
@@ -124,6 +125,10 @@ def menu_candidates(
     ).all()
     evidence: dict[str, dict[str, object]] = {}
     for restaurant in restaurants:
+        # 실제 근거는 식당 업태를 기준으로 선택한다. 도시락집의 비빔밥도 후보가 된다.
+        raw_cuisine = restaurant.cuisine or restaurant.category_name
+        if not matches_food_type(cuisine, raw_cuisine):
+            continue
         if _distance_m(latitude, longitude, restaurant.latitude, restaurant.longitude) > radius_m:
             continue
         if restaurant.detail_status is None or restaurant.detail_status.menu_status != "success":
@@ -144,7 +149,7 @@ def menu_candidates(
             MenuCandidate(
                 id=catalog.id,
                 name=catalog.name,
-                cuisine=catalog.cuisine,
+                cuisine=cuisine if cuisine != "전체" else catalog_food_type(catalog.cuisine),
                 search_keyword=catalog.search_keyword,
                 description=catalog.description,
                 source="database",
@@ -162,7 +167,7 @@ def menu_candidates(
         MenuCandidate(
             id=catalog.id,
             name=catalog.name,
-            cuisine=catalog.cuisine,
+            cuisine=catalog_food_type(catalog.cuisine),
             search_keyword=catalog.search_keyword,
             description=catalog.description,
             source="catalog",
@@ -173,6 +178,7 @@ def menu_candidates(
         )
         for catalog in catalogs
         if catalog.price_hint is not None and catalog.price_hint <= budget
+        and (cuisine == "전체" or catalog_food_type(catalog.cuisine) == cuisine)
     ]
 
 

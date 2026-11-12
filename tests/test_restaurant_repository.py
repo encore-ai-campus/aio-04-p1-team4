@@ -66,7 +66,7 @@ def test_bad_and_non_food_records_do_not_cancel_valid_record(tmp_path: Path):
                 session,
                 [
                     candidate(id=""),
-                    candidate(id="not-food", category_group_code="CE7"),
+                    candidate(id="not-food", category_group_code="SC4"),
                     candidate(id="valid"),
                 ],
             )
@@ -75,5 +75,19 @@ def test_bad_and_non_food_records_do_not_cancel_valid_record(tmp_path: Path):
             }
             assert session.get(Restaurant, "valid") is not None
             assert session.get(Restaurant, "not-food") is None
+    finally:
+        database.dispose()
+
+
+def test_cafe_group_is_saved_with_original_category(tmp_path: Path):
+    database = Database(f"sqlite:///{(tmp_path / 'cafes.db').as_posix()}")
+    database.init_schema()
+    try:
+        with database.session_factory() as session:
+            result = save_restaurants(session, [candidate(
+                id="cafe", category_group_code="CE7", category="음식점 > 카페"
+            )])
+            assert result.inserted == 1
+            assert session.get(Restaurant, "cafe").cuisine == "카페"
     finally:
         database.dispose()

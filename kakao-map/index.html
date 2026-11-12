@@ -1,132 +1,19 @@
 <!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LUNCH RUN · 지도 핀 예시</title>
-  <link rel="stylesheet" href="styles.css?v=overlap-count-20261109">
-</head>
-<body>
-  <header>
-    <a class="brand" href="./"><span class="brand-icon">↗</span>LUNCH RUN<span class="brand-dot">.</span></a>
-    <span class="header-note">점심을 고르는 가벼운 방법</span>
-    <span class="example-tag">INTERACTIVE EXAMPLE</span>
-  </header>
-  <main>
-    <aside>
-      <div class="intro">
-        <p class="eyebrow">오늘의 점심 탐색</p>
-        <h1>오늘 점심,<br>지도에서 골라요<span>.</span></h1>
-        <p class="intro-copy">핀을 누르면 어떤 식당인지 볼 수 있어요.<br>고민된다면 한 곳을 뽑아보세요.</p>
-        <div class="location" id="search-location"><span>◎</span> 독산역 기준 · 초기 목록</div>
-        <div class="radius-control">
-          <div class="radius-control-heading"><label for="search-radius">검색 반경</label><output id="radius-value" for="search-radius">1km</output></div>
-          <div class="radius-control-input"><button id="radius-less" type="button" aria-label="검색 반경 100m 줄이기" disabled>−</button><input id="search-radius" type="range" min="100" max="1000" step="100" value="1000" aria-valuetext="1km" disabled><button id="radius-more" type="button" aria-label="검색 반경 100m 늘리기" disabled>＋</button></div>
-          <div class="radius-control-scale"><span>100m</span><span>100m 단위로 조절</span><span>1km</span></div>
-        </div>
-        <button id="nearby-search" class="nearby-search" type="button" disabled>◎ 내 위치 주변 찾기</button>
-        <p class="location-help">위치가 다르면 지도를 움직인 뒤 <strong>이 지도 중심으로 검색</strong>을 누르세요.</p>
-        <form id="place-search-form" class="place-search-form">
-          <label class="sr-only" for="place-query">주변을 검색할 역이나 장소</label>
-          <input id="place-query" type="search" placeholder="가까운 역·장소 검색" autocomplete="off">
-          <button id="place-submit" type="submit" disabled>검색</button>
-        </form>
-        <div id="place-choices" class="place-choices"></div>
-        <p id="search-status" class="search-status" role="status">지도 연결 후 반경 1km의 음식점을 검색합니다.</p>
-        <div class="cuisine-control"><label for="cuisine-filter">음식 종류</label><select id="cuisine-filter" aria-describedby="cuisine-note"></select><small id="cuisine-note">선택한 종류의 지도 핀·목록에서 뽑아요.</small></div>
-        <button id="random" class="random">오늘 갈 곳 뽑기 <span>↗</span></button>
-        <p id="roulette-status" class="roulette-status" role="status" hidden></p>
-        <a href="menu-catalog.html" class="catalog-link">금천구 전체 메뉴 검색 ↗</a>
-      </div>
-      <div class="list-heading"><h2 id="list-title">독산역 주변 음식점</h2><span id="count"></span></div>
-      <div id="restaurant-list" class="restaurant-list"></div>
-      <p class="data-note">카카오맵·네이버 지도에서 확인된 가게와 실시간 카카오 검색 결과를 표시합니다.<br>현재 영업 여부는 방문 전에 확인해주세요. 거리는 기준점에서의 직선거리입니다.</p>
-    </aside>
-    <section class="map-section" aria-label="지도와 식당 핀">
-      <div class="map-topbar">
-        <span id="mode-label"><i></i> 핀 동작 미리보기</span>
-        <button id="setup-open">카카오맵 연결하기 ↗</button>
-      </div>
-      <div id="map" class="map">
-        <div id="illustration" aria-hidden="true">
-          <svg viewBox="0 0 1000 800" preserveAspectRatio="none">
-            <rect width="1000" height="800" fill="#eaece5"/>
-            <g fill="#e0e3db" stroke="#d9ddd3" stroke-width="2">
-              <rect x="62" y="62" width="220" height="118" rx="14"/><rect x="325" y="56" width="190" height="140" rx="14"/>
-              <rect x="570" y="55" width="138" height="150" rx="12"/><rect x="760" y="64" width="184" height="130" rx="12"/>
-              <rect x="50" y="253" width="220" height="170" rx="12"/><rect x="328" y="263" width="175" height="144" rx="12"/>
-              <rect x="575" y="260" width="145" height="160" rx="12"/><rect x="772" y="267" width="180" height="180" rx="12"/>
-              <rect x="57" y="510" width="190" height="215" rx="12"/><rect x="310" y="506" width="198" height="210" rx="12"/>
-              <rect x="578" y="510" width="190" height="205" rx="12"/>
-            </g>
-            <rect x="815" y="555" width="140" height="165" rx="38" fill="#d0ddc3"/>
-            <g fill="none" stroke="#fafbf6" stroke-linejoin="round">
-              <path d="M-20 220H1020M-20 468H1020M294-20V820M544-20V820M741-20V520" stroke-width="35"/>
-              <path d="M-20 745L1020 150" stroke-width="50"/>
-            </g>
-            <path d="M-20 745L1020 150" stroke="#d9ddcf" fill="none" stroke-width="2" stroke-dasharray="9 9"/>
-            <g fill="#bec5b9"><circle cx="850" cy="590" r="13"/><circle cx="900" cy="625" r="17"/><circle cx="845" cy="665" r="18"/></g>
-          </svg>
-          <span class="district-label">가산동</span>
-        </div>
-        <div id="demo-pins"></div>
-        <div class="map-hint" id="map-hint">설명용 배경 · 실제 도로 지도는 아닙니다</div>
-        <button id="locate" class="locate-button" type="button" disabled>◎ 내 위치</button>
-        <div class="map-center-crosshair" aria-hidden="true">＋</div>
-        <button id="map-center-search" class="map-center-search" type="button" disabled>이 지도 중심으로 검색</button>
-        <div id="location-status" class="location-status" role="status" hidden></div>
-        <button id="use-approximate" class="use-approximate" type="button" hidden>대략 위치 사용</button>
-        <div id="selected-card" class="selected-card" aria-live="polite"></div>
-      </div>
-      <footer><span>01 &nbsp; 지도 위 핀을 눌러보세요</span><span>SELECT YOUR NEXT LUNCH ↗</span></footer>
-    </section>
-  </main>
-  <dialog id="setup">
-    <form id="setup-form">
-      <button class="close" id="setup-close" type="button" aria-label="닫기">×</button>
-      <p class="eyebrow">실제 지도 연결</p>
-      <h2>카카오맵으로 바꿔볼까요?</h2>
-      <p>JavaScript 키의 SDK 도메인에 아래 주소를 등록하세요.</p>
-      <code id="origin"></code>
-      <label for="javascript-key">카카오 JavaScript 키</label>
-      <input id="javascript-key" type="password" autocomplete="off" placeholder="REST API 키와 다른 키입니다">
-      <p class="setup-note">키는 저장하지 않고 현재 화면에서만 사용합니다.<br>또는 프로젝트 .env에 KAKAO_JAVASCRIPT_KEY를 추가하세요.</p>
-      <button class="random" type="submit">실제 카카오 지도 불러오기 ↗</button>
-      <p id="setup-error" role="alert"></p>
-    </form>
-  </dialog>
-  <dialog id="menu-dialog" class="menu-dialog">
-    <button class="close" id="menu-close" type="button" aria-label="메뉴 창 닫기">×</button>
-    <p class="eyebrow">식당 메뉴</p>
-    <h2 id="menu-title"></h2>
-    <p class="menu-price-note">공개 페이지에서 확인한 메뉴입니다. 메뉴와 가격은 매장 상황에 따라 달라질 수 있어요.</p>
-    <div id="menu-items" class="menu-items"></div>
-    <p id="menu-source" class="menu-source"></p>
-  </dialog>
-  <dialog id="route-origin-dialog" class="route-origin-dialog">
-    <button class="close" id="route-origin-close" type="button" aria-label="출발지 창 닫기">×</button>
-    <p class="eyebrow">식당까지 길찾기</p>
-    <h2>어디에서 출발하나요?</h2>
-    <p>현재 위치가 정확하지 않으면 주소·건물·역 이름으로 출발지를 선택하세요. 선택한 식당은 유지됩니다.</p>
-    <form id="route-origin-form">
-      <label for="route-origin-query">출발할 장소</label>
-      <div class="route-origin-input"><input id="route-origin-query" type="search" placeholder="예: 독산역, 가산디지털단지역" autocomplete="off" required><button type="submit">검색</button></div>
-    </form>
-    <p id="route-origin-status" role="status"></p>
-    <div id="route-origin-choices" class="place-choices"></div>
-    <div class="route-origin-shortcuts"><button id="route-use-search-center" type="button">현재 검색 기준점 사용</button><button id="route-use-map-center" type="button">지도의 가운데를 출발지로</button></div>
-  </dialog>
-  <script src="cuisine-data.js?v=20261109-mamas-dedup"></script>
-  <script src="cuisine.js?v=20261108-cuisine-options"></script>
-  <script src="data.js"></script>
-  <script src="menus.js?v=20261109-mamas-dedup"></script>
-  <script src="nearby-data.js?v=20261109-mamas-dedup"></script>
-  <script src="nearby-search.js?v=20261109-mamas-dedup"></script>
-  <script src="location.js?v=20261106-diagnostics"></script>
-  <script src="routes.js?v=route-connect-20261108"></script>
-  <script src="business-hours-data.js?v=20261109-mamas-dedup"></script>
-  <script src="business-hours.js?v=20261109-mamas-dedup"></script>
-  <script src="pin-overlaps.js?v=20261109"></script>
-  <script src="app.js?v=overlap-count-20261109"></script>
-</body>
-</html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LUNCH RUN · 식당 지도</title>
+<style>#kakao-map{position:absolute;inset:0}.backend-map-pin{border:2px solid white;border-radius:20px;padding:9px 12px;color:white;font-weight:700;box-shadow:0 3px 10px #0003}.map-hint{max-width:85%;white-space:normal}#selected-card[hidden]{display:none}#map-budget{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px}.map-links{display:flex;gap:14px;margin:12px 0;font-size:13px}.overlap-count{min-width:50px}#selected-card{max-height:70vh;overflow:auto}#selected-card section{border-top:1px solid #e6e8df;margin-top:12px;padding-top:12px}#selected-card section button{margin:4px;padding:7px;border:1px solid #ddd;border-radius:7px;background:#fff}#selected-card section a{font-size:12px}.random:disabled{opacity:.5;cursor:not-allowed}#search-again,#change-location{width:100%;padding:12px;margin:7px 0;border:1px solid #ddd;border-radius:9px;background:white}#map-conditions button{padding:8px;margin:8px 0;border:1px solid #ddd;border-radius:8px}#kakao-map{min-height:620px}</style>
+<link rel="stylesheet" href="styles.css?v=2"><link rel="stylesheet" href="/static/location-picker.css">
+</head><body>
+<header><a class="brand" href="/"><span class="brand-icon">↗</span>LUNCH RUN<span class="brand-dot">.</span></a><span class="header-note">점심을 고르는 가벼운 방법</span><span class="example-tag">KAKAO MAP</span></header>
+<main><aside><div class="intro"><p class="eyebrow">오늘의 점심 탐색</p><h1>오늘 점심,<br>지도에서 골라요<span>.</span></h1><p class="intro-copy">목록이나 핀을 눌러 식당 정보를 확인하세요.</p>
+<div class="location" id="search-location"></div><button id="precise-location" type="button">◎ 내 위치 정밀 확인</button><button id="map-center-search" type="button">이 지도 중심으로 검색</button><button id="change-location" type="button">⌖ 출발 위치 변경</button>
+<div class="radius-control"><div class="radius-control-heading"><label for="search-radius">검색 반경</label><output id="radius-value"></output></div><button id="radius-less" type="button" aria-label="반경 줄이기">−</button><button id="radius-more" type="button" aria-label="반경 늘리기">＋</button><input id="search-radius" type="range" min="50" max="500" step="50"></div>
+<form id="map-conditions"><label for="map-budget">한 끼 예산</label><input id="map-budget" type="number" min="1000" max="100000" step="1" required><div class="cuisine-control"><label for="cuisine-filter">음식 종류</label><select id="cuisine-filter"></select></div><button type="submit">조건 적용 후 재검색</button></form>
+<button id="search-again" type="button">같은 조건으로 다시 검색</button><p id="search-status" class="search-status" role="status" aria-live="polite">위치와 메뉴를 확인해주세요.</p>
+<button id="random" class="random" type="button">검증된 추천에서 뽑기 ↗</button><button id="catalog-open" type="button" class="catalog-link">DB 전체 메뉴 검색 ↗</button><nav class="map-links"><a href="/games/" data-action="back-game">메뉴 다시 고르기</a><a href="/">조건 설정으로</a></nav></div>
+<div class="list-heading"><h2 id="list-title"></h2><span id="count"></span></div><div id="restaurant-list" class="restaurant-list"></div>
+<p class="data-note">카카오 검색과 백엔드 DB·상세정보 검증 결과입니다. 거리는 직선 기준이며, 조회 이후 가격·영업 상태는 달라질 수 있습니다. 확인 필요 후보는 추첨에서 제외합니다.</p>
+</aside><section class="map-section" aria-label="지도와 식당 핀"><div class="map-topbar"><span id="mode-label"><i></i> 카카오 지도 · 실제 좌표</span><button id="setup-open" type="button">지도 다시 연결</button></div>
+<div id="map" class="map"><div id="kakao-map"></div><div class="map-hint" id="map-hint" role="status">카카오 지도를 연결하고 있어요…</div><div id="selected-card" class="selected-card" aria-live="polite" hidden></div></div>
+<footer><span>목록과 마커가 같은 식당을 표시합니다.</span><span>SELECT YOUR NEXT LUNCH ↗</span></footer></section></main>
+<script src="/static/state.js"></script><script src="/static/location.js"></script><script src="/static/location-picker.js"></script>
+<script>for(const name of ['전체','한식','중식','일식/회','양식','분식','패스트푸드','치킨','도시락/구내식당','뷔페식','냉면','고기','카페/빵','술집','기타']){const option=document.createElement('option');option.value=name;option.textContent=name;document.getElementById('cuisine-filter').append(option);}</script><script src="geolocation-diagnostics.js"></script><script src="routes.js"></script><script src="pin-overlaps.js"></script><script src="integration.js"></script></body></html>

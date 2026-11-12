@@ -132,7 +132,7 @@ def test_existing_create_all_database_can_be_stamped_without_data_loss(tmp_path:
         with database.session_factory() as session:
             assert len(session.scalars(select(MenuCatalog)).all()) == 10
             version = session.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            assert version == "0001_initial_schema"
+            assert version == "0002_catalog_food_types"
     finally:
         database.dispose()
 
@@ -153,5 +153,36 @@ def test_readiness_checks_database_catalog_browser_and_configuration(tmp_path: P
         assert status == 503
         assert report["status"] == "not_ready"
         assert report["checks"]["playwright_chromium"] is False
+    finally:
+        database.dispose()
+
+
+def test_food_type_migration_preserves_rows_aliases_and_inactive_state(tmp_path):
+    url = f"sqlite:///{(tmp_path / 'old_catalog.db').as_posix()}"
+    config = alembic_config(url)
+    command.upgrade(config, "0001_initial_schema")
+    database = Database(url)
+    try:
+        with database.engine.begin() as connection:
+            for key, cuisine in [('old-fish', '일식'), ('old-salad', '샐러드')]:
+                connection.execute(text(
+                    "INSERT INTO menu_catalog (id,name,normalized_name,cuisine,search_keyword,description,price_hint,active) "
+                    "VALUES (:id,:id,:id,:cuisine,:id,'설명',9000,false)"
+                ), {'id': key, 'cuisine': cuisine})
+            connection.execute(text(
+                "INSERT INTO menu_alias (menu_catalog_id,name,normalized_name) VALUES ('old-fish','별칭','별칭')"
+            ))
+        command.upgrade(config, "head")
+        with database.session_factory() as session:
+            fish = session.get(MenuCatalog, 'old-fish')
+            assert fish.cuisine == '일식/회'
+            assert not fish.active
+            assert fish.price_hint == 9000
+            assert fish.description == '설명'
+            assert [row.name for row in fish.aliases] == ['별칭']
+            assert session.get(MenuCatalog, 'old-salad').cuisine == '기타'
+        with database.engine.connect() as connection:
+            assert connection.execute(text('PRAGMA foreign_key_check')).all() == []
+        command.check(config)
     finally:
         database.dispose()

@@ -33,6 +33,8 @@ class MapRouteTests(unittest.TestCase):
             kakao_javascript_key="test-public-js-key",
         )
         app.include_router(router)
+        from fastapi.staticfiles import StaticFiles
+        app.mount('/static', StaticFiles(directory=PROJECT_ROOT / 'frontend'), name='static')
         self.client = TestClient(app)
         self.addCleanup(self.client.close)
 
@@ -49,7 +51,7 @@ class MapRouteTests(unittest.TestCase):
             self.assertTrue(parser.assets)
             for asset in parser.assets:
                 with self.subTest(asset=asset):
-                    self.assertEqual(self.client.get("/map/" + asset).status_code, 200)
+                    self.assertEqual(self.client.get(asset if asset.startswith('/') else "/map/" + asset).status_code, 200)
 
     def test_only_public_key_is_exposed(self):
         response = self.client.get("/map/config.json")

@@ -10,3 +10,14 @@ __pycache__/
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/backups/
+tmp/live-integration.db*
+tmp/verification-deps/
+tmp/pytest-integration/
+tmp/pytest-db-integration/
+tmp/pytest-games*/
+tmp/pytest-location*/
+tmp/pytest-state*/
+tmp/pytest-map*/
+tmp/pytest-chat*/
+tmp/map-live-sdk.png

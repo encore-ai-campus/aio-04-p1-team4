@@ -39,3 +39,35 @@
 .business-hours{padding-top:9px}.business-hours-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.business-status{display:inline-block;font-size:11px;font-weight:700;border-radius:5px;padding:4px 7px;background:#eef0eb;color:#697261}.business-status.is-open{background:#e3f4e9;color:#14713f}.business-status.is-closed,.business-status.is-holiday{background:#f1ecea;color:#8c5245}.business-status.is-break,.business-status.is-last-order{background:#fff1d9;color:#925e0d}.business-hours-line small,.business-hours-unknown{font-size:10px;color:#77806f;line-height:1.5}.business-hours-unknown{display:block;margin-top:5px}.business-hours-details{margin-top:6px;font-size:10px;color:#687560}.business-hours-details summary{cursor:pointer}.selected-card .business-hours-raw{white-space:pre-line;font-size:10px;line-height:1.7;margin:7px 0}.selected-card .business-hours-evidence{font-size:10px;color:#77806f}.business-hours-evidence a{color:#456b3b}
 .overlap-place-panel{position:absolute;top:58px;right:14px;z-index:1000;width:min(320px,calc(100% - 28px));max-height:calc(100% - 80px);display:flex;flex-direction:column;background:#fff;border:1px solid #e4e7df;border-radius:12px;box-shadow:0 5px 24px #0002;overflow:hidden}.overlap-place-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 14px 8px}.overlap-place-heading h3{font-size:15px;margin:0;color:#293525}.overlap-place-heading button{padding:5px 8px;border:1px solid #dbe1d4;border-radius:6px;background:#f7f9f3;color:#59664f;font-size:11px;cursor:pointer}.overlap-place-panel>p{font-size:11px;color:#78816f;line-height:1.5;margin:0;padding:0 14px 10px}.overlap-place-items{overflow:auto;min-height:0;overscroll-behavior:contain;border-top:1px solid #eef0e9}.overlap-place-item{display:block;width:100%;padding:12px 14px;border:0;border-bottom:1px solid #eef0e9;text-align:left;background:white;cursor:pointer;color:#34402d}.overlap-place-item:hover,.overlap-place-item:focus-visible{background:#f4f7ef}.overlap-place-item strong{font-size:13px;margin-right:7px}.overlap-place-item small{display:inline;font-size:10px;color:#7a896e}.overlap-place-item>span{display:block;margin-top:4px;font-size:10px;color:#78816f;line-height:1.5}.overlap-list-open .selected-card{visibility:hidden}
 .overlap-count-badge{min-width:23px;height:23px;border:2px solid #fff;border-radius:13px;padding:0 5px;background:#fff;color:#c72d28;box-shadow:0 1px 5px #0005;font:800 11px/19px Arial,sans-serif;cursor:pointer;transform:translate(9px,-29px);white-space:nowrap}.overlap-count-badge:hover{background:#fff0ec}.overlap-count-badge:focus-visible{outline:3px solid #2672d5;outline-offset:2px}
+
+/* /conditions와 /games의 시각 언어를 따르는 지도 화면. 구조와 기능은 유지합니다. */
+:root{--ink:#17243b;--muted:#66758a;--orange:#ff641a;--paper:#f6f8fb;--line:#e1e7ef}
+body{background:#fff;color:var(--ink);font-family:"Malgun Gothic","Noto Sans KR",Arial,sans-serif}
+header{height:72px;padding:0 32px;border-color:var(--line);box-shadow:0 1px 0 #17243b08}
+.brand{color:var(--ink);font-size:23px}.brand-icon{background:var(--orange);border-radius:11px}.brand-dot{color:var(--orange)}
+.header-note{color:var(--muted)}.example-tag{color:#a44716;background:#fff6f0;border-color:#ffe0cc;font-weight:700}
+main{grid-template-columns:350px minmax(0,1fr);background:#fff}
+aside{background:#f6f8fb;border-color:var(--line);padding:28px 24px 20px}
+.eyebrow{color:#718095;letter-spacing:2px}.intro h1{font-size:32px;color:var(--ink)}.intro h1 span{color:var(--orange)}.intro-copy{color:var(--muted)}
+.location{background:#fff;border:1px solid var(--line);border-radius:13px;padding:14px 15px;box-shadow:0 4px 16px #17243b08}
+#precise-location,#map-center-search,#change-location,#search-again,#map-conditions button{border:1px solid var(--line);border-radius:11px;background:#fff;color:#455570;font-weight:700;transition:.15s ease}
+#precise-location:hover,#map-center-search:hover,#change-location:hover,#search-again:hover,#map-conditions button:hover{border-color:var(--orange);background:#fff8f4;color:#a44716}
+.radius-control{background:#fff;border-color:var(--line);border-radius:13px}.radius-control-heading output{color:var(--orange)}.radius-control-input input{accent-color:var(--orange)}
+#map-budget,.cuisine-control select{min-height:43px;background:#fff;border-color:#d3d9e3;border-radius:11px;color:var(--ink)}
+.cuisine-control label{color:var(--ink)}
+#map-conditions button[type=submit],.random{background:var(--orange);border-color:var(--orange);color:#fff;border-radius:11px;box-shadow:0 7px 16px #ff641a24}
+#map-conditions button[type=submit]:hover,.random:hover{background:#e95412;color:#fff}
+.catalog-link{padding:11px;border:1px solid var(--line);border-radius:11px;background:#fff;color:#455570;font-weight:700;text-decoration:none}
+.map-links{justify-content:center}.map-links a{color:#607188;text-decoration:none;padding:5px 2px;border-bottom:1px solid #cbd3df}.map-links a:hover{color:var(--orange);border-color:var(--orange)}
+.list-heading{border-top:1px solid var(--line);padding-top:20px}.list-heading h2{font-size:14px}.list-heading>span{color:var(--muted)}
+.restaurant-list{gap:10px}.restaurant-item{border-color:var(--line);border-radius:13px;padding:14px;background:#fff;box-shadow:0 3px 12px #17243b06}.restaurant-item:hover{border-color:#ffb28e;background:#fffaf7}.restaurant-item.active{border-color:var(--orange);background:#fff6f0;box-shadow:0 5px 16px #ff641a16}.restaurant-item .number{background:#eef2f6;color:#455570}.restaurant-item.active .number{background:var(--orange);color:#fff}.restaurant-item strong{font-size:13px;color:var(--ink)}.restaurant-item small{color:var(--muted)}
+.map-section{background:#fff}.map-topbar>span{color:var(--ink)}.map-topbar i{background:var(--orange)}.map-topbar button{color:var(--muted)}
+.map{border-color:var(--line);border-radius:18px;box-shadow:0 8px 28px #17243b12;background:#eef2f6}
+.map-hint{border:1px solid var(--line);border-radius:10px;color:#455570}
+.backend-map-pin{background:var(--orange)!important;border:3px solid #fff!important;box-shadow:0 5px 14px #17243b42!important}
+.backend-map-pin.overlap-count{display:grid;place-items:center;min-width:38px;height:38px;padding:0 8px;border-radius:50%;font:800 14px/1 Arial,sans-serif;color:#fff}
+.selected-card{border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 40px #17243b24}.selected-card h2{color:var(--ink)}
+.selected-card section button,.walking-route-button,.menu-open{border-radius:10px}.walking-route-button{background:var(--orange)}.walking-route-button:hover{background:#e95412}
+.overlap-place-panel{border-color:var(--line);border-radius:15px;box-shadow:0 12px 36px #17243b24}.overlap-place-heading h3{color:var(--ink)}.overlap-place-item{color:var(--ink)}.overlap-place-item:hover{background:#fff6f0}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #438ba8;outline-offset:3px}
+@media(max-width:800px){main{grid-template-columns:1fr}aside{background:#f6f8fb}.restaurant-list{grid-template-columns:1fr 1fr}}

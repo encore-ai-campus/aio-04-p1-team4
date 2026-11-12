@@ -1,4 +1,67 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LUNCH RUN · UI 03</title><link rel="stylesheet" href="styles.css?v=20261112-ui2"></head><body><div class="viewport"><div class="app">
-<header><a href="#conditions" class="brand"><img src="assets/logo.svg" alt="LUNCH RUN"></a><div class="header-right"><button id="location"><svg class="header-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 29s10-11 10-18a10 10 0 0 0-20 0c0 7 10 18 10 18Z"/><circle cx="16" cy="11" r="4"/></svg><span>위치</span></button><span>│</span><button id="account"><svg class="header-icon" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="10" r="6"/><path d="M4 30v-4c0-10 24-10 24 0v4"/></svg><span>계정</span></button></div></header>
-<main><h1 id="title">오늘 점심, 어떻게 고를까요?</h1><p id="summary"></p><section id="screen"><p>화면 준비 중입니다.</p></section><p id="status" role="status" aria-live="polite"></p></main>
-<nav id="dock" aria-label="진행 단계"></nav><footer><span id="mode" hidden></span><span>LUNCH RUN　/　 SINCE 2026</span></footer></div></div><script defer src="bundle.js?v=20261112-ui2"></script></body></html>
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>LUNCH RUN · UI 03</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css?v=20261112-ui6" />
+    <link
+      rel="stylesheet"
+      href="assets/shared-header.css?v=20261112-stable-header"
+    />
+    <link
+      rel="stylesheet"
+      href="/assets/location-dialog.css?v=20261112-location"
+    />
+    <script src="/assets/location-dialog.js?v=20261112-location"></script>
+    <link
+      rel="stylesheet"
+      href="/assets/profile-dialog.css?v=20261112-profile"
+    />
+    <script src="/assets/profile-dialog.js?v=20261112-profile"></script>
+  </head>
+  <body>
+    <header class="site-header topbar main-site-header">
+      <a class="brand" href="/" aria-label="런치런 홈"
+        ><img src="assets/logo.svg" alt="LUNCH RUN"
+      /></a>
+      <nav class="header-tools" aria-label="계정과 설정">
+        <button type="button" id="location">
+          <svg class="location-icon" viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16 29s10-11 10-18a10 10 0 0 0-20 0c0 7 10 18 10 18Z" />
+            <circle cx="16" cy="11" r="4" /></svg
+          ><span class="location-label">위치</span>
+        </button>
+        <button type="button" class="nav-item" data-member-only hidden>
+          나의 취향
+        </button>
+        <button type="button" class="profile-btn" id="account">
+          <span class="avatar" aria-hidden="true">G</span
+          ><span class="profile-label">게스트</span>
+        </button>
+      </nav>
+    </header>
+    <div class="viewport">
+      <div class="app">
+        <main>
+          <h1 id="title">오늘 점심, 어떻게 고를까요?</h1>
+          <p id="summary"></p>
+          <section id="screen"><p>화면 준비 중입니다.</p></section>
+          <p id="status" role="status" aria-live="polite"></p>
+        </main>
+        <footer>
+          <span id="mode" hidden></span><span>LUNCH RUN　/　 SINCE 2026</span>
+        </footer>
+      </div>
+    </div>
+    <nav id="dock" aria-label="진행 단계"></nav>
+    <script src="assets/screen-motion.js?v=20261112-motion"></script>
+    <script defer src="bundle.js?v=20261112-ui7"></script>
+  </body>
+</html>

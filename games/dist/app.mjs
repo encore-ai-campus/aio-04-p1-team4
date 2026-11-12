@@ -1,4 +1,3 @@
-import { mountRoomFlow, closeRoomFlow } from "./rooms.mjs";
 import {
   MENUS,
   filterMenus,
@@ -127,12 +126,6 @@ const state = {
   restaurantDrawDone: false,
   restaurantSpotlight: -1,
 };
-// Invitation links open the shared room independently of the solo default.
-if (/^\d{6}$/.test(new URLSearchParams(location.search).get("room") || "")) {
-  state.gameScreen = "play";
-  state.mode = "group";
-  state.game = "intersection";
-}
 const games = {
   draw: {
     name: "제비뽑기",
@@ -157,12 +150,6 @@ const games = {
     sub: "게임도 운명에 맡기기",
     icon: "⚄",
     badge: "SURPRISE ME",
-  },
-  intersection: {
-    name: "우리의 교집합",
-    sub: "각자 고르고, 함께 결정해요",
-    icon: "◎",
-    badge: "OUR INTERSECTION",
   },
   roulette: {
     name: "룰렛",
@@ -211,7 +198,7 @@ function setBusy(value) {
   state.busy = value;
   if (value) {
     for (const e of $$(
-      "button, #filters-form input, #filters-form select, #location, .participant-inputs input",
+      "button, .location-dialog select, .participant-inputs input",
     )) {
       if (!busyControls.has(e)) busyControls.set(e, e.disabled);
       e.disabled = true;
@@ -221,8 +208,6 @@ function setBusy(value) {
       if (e.isConnected) e.disabled = disabled;
     }
     busyControls.clear();
-    $("#people-minus").disabled = state.people <= 1;
-    $("#quick-pick").disabled = !candidates().length;
   }
   $(".play-board").setAttribute("aria-busy", String(value));
   $("#board-status").innerHTML = value
@@ -232,6 +217,8 @@ function setBusy(value) {
       : '<i class="live-dot"></i> READY TO PLAY';
 }
 function updateProfile() {
+  // A locally saved nickname is not a signed-in member account.
+  $("[data-member-only]").hidden = true;
   $("#profile-label").textContent = state.profile || "게스트";
   $(".avatar").textContent = state.profile ? state.profile.slice(0, 1) : "G";
   $("#saved-count").textContent = state.favorites.length;
@@ -265,69 +252,22 @@ function updateProgress() {
     e.classList.toggle("is-done", i + 1 < decisionStep);
   });
 }
-function syncFilters() {
-  const budgetMin = Math.min(5000, state.budget),
-    budgetMax = Math.max(20000, state.budget);
-  $("#budget").min = budgetMin;
-  $("#budget").max = budgetMax;
-  $("#budget").step = state.budget % 1000 === 0 ? 1000 : 1;
-  $("#budget").value = state.budget;
-  $("#budget-value").textContent = won(state.budget);
-  $("#distance").value = String(state.distance);
-  $("#people-count").textContent = state.people;
-  $("#lunch-time").value = state.time;
-  $("#time-value").textContent = state.time;
-  $("#distance-value").textContent = state.distance;
-  $("#lunch-time").style.setProperty(
-    "background",
-    `linear-gradient(to right,#FF641B ${(state.time / 180) * 100}%,#DDE4ED ${100 - (state.time / 180) * 100}%)`,
-  );
-  $("#distance").style.setProperty(
-    "background",
-    `linear-gradient(to right,#FF641B ${(state.distance / 1000) * 100}%,#DDE4ED ${100 - (state.distance / 1000) * 100}%)`,
-  );
-  if (state.origin && !$("#location option[data-current-location]"))
-    $("#location").insertAdjacentHTML(
-      "beforeend",
-      '<option data-current-location value="현재 위치">현재 위치</option>',
-    );
-  $("#location").value = state.origin ? "현재 위치" : state.location;
-  $$(".range-ends span").forEach(
-    (e, i) => (e.textContent = won(i ? budgetMax : budgetMin) + "원"),
-  );
-  $("#budget").style.setProperty(
-    "--range-progress",
-    `${((state.budget - budgetMin) / (budgetMax - budgetMin)) * 100}%`,
-  );
-  const timeOptions = $("#time-options");
-  const custom = timeOptions.querySelector("[data-custom]");
-  if (custom) custom.remove();
-  if (![30, 45, 60, 90].includes(state.time))
-    timeOptions.insertAdjacentHTML(
-      "beforeend",
-      /* HTML */ `<button type="button" data-time="${state.time}" data-custom>
-        ${state.time}분
-      </button>`,
-    );
-  $$("#time-options button").forEach((e) => {
-    e.classList.toggle("selected", Number(e.dataset.time) === state.time);
-    e.setAttribute(
-      "aria-pressed",
-      String(Number(e.dataset.time) === state.time),
-    );
+// Conditions come from the home screen; the header edits only location.
+
+function openLocationSettings() {
+  const point = state.origin || window.LunchRunLocation.places[state.location];
+  window.LunchRunLocation.open({
+    current: point
+      ? { name: state.location, latitude: point[0], longitude: point[1] }
+      : null,
+    onChange(value) {
+      state.location = value.name;
+      state.origin = [value.latitude, value.longitude];
+      conditionsChanged();
+    },
   });
-  $$("#category-options button").forEach((e) => {
-    const active =
-      e.dataset.category === "전체"
-        ? state.categories.length === 0
-        : state.categories.includes(e.dataset.category);
-    e.classList.toggle("active", active);
-    e.setAttribute("aria-pressed", String(active));
-  });
-  $("#people-hint").textContent =
-    state.people === 1 ? "혼자도 좋아요" : `룰렛 최대 12명 · 사다리 최대 8명`;
-  $("#people-minus").disabled = state.people === 1;
 }
+
 function resetRestaurantDraw() {
   state.restaurantCandidates = null;
   state.restaurantDrawDone = false;
@@ -344,26 +284,27 @@ function conditionsChanged() {
   state.ladder = null;
   state.aiReady = false;
   resetRestaurantDraw();
-  syncFilters();
   render();
 }
 function render() {
   updateProgress();
   const pool = candidates();
-  $("#candidate-count").textContent = `${pool.length}개`;
   $("#pool-count").textContent = pool.length;
-  $("#menu-pool").innerHTML = pool.length
-    ? pool
-        .map(
-          (m) =>
-            /* HTML */ `<button class="menu-chip" data-detail="${m.id}">
-              <span>${m.emoji}</span><span>${esc(m.name)}</span
-              ><small>${esc(m.category)}</small>
-            </button>`,
-        )
-        .join("")
-    : '<div class="empty-state"><span>⌕</span><h3>조건에 맞는 메뉴가 없어요</h3><p>예산·시간·거리를 조금 늘리거나<br>카테고리를 바꿔보세요.</p><button class="secondary" data-action="reset">조건 초기화</button></div>';
-  $("#quick-pick").disabled = !pool.length;
+  // The candidate panel is hidden in this layout. Avoid building hundreds of
+  // offscreen buttons during the initial route change.
+  if (!$("#menu-pool").closest("[hidden]")) {
+    $("#menu-pool").innerHTML = pool.length
+      ? pool
+          .map(
+            (m) =>
+              /* HTML */ `<button class="menu-chip" data-detail="${m.id}">
+                <span>${m.emoji}</span><span>${esc(m.name)}</span
+                ><small>${esc(m.category)}</small>
+              </button>`,
+          )
+          .join("")
+      : '<div class="empty-state"><span>⌕</span><h3>조건에 맞는 메뉴가 없어요</h3><p>예산·시간·거리를 조금 늘리거나<br>카테고리를 바꿔보세요.</p><button class="secondary" data-action="reset">조건 초기화</button></div>';
+  }
   renderGame(pool);
   renderSuggestions(pool);
   if (state.view === "restaurants") renderRestaurants();
@@ -374,7 +315,7 @@ function renderGame(pool) {
   updateProgress();
   const types =
     state.mode === "group"
-      ? ["roulette", "ladder", "intersection"]
+      ? ["roulette", "ladder"]
       : state.mode === "ai"
         ? []
         : ["draw", "gacha", "ticket", "random"];
@@ -391,7 +332,13 @@ function renderGame(pool) {
           data-game="${k}"
           aria-pressed="${state.game === k}"
         >
-          ${k === "intersection" ? '<span class="game-option-icon">◎</span>' : /* HTML */ `<img class="game-option-art" src="./assets/option-${k}.png" alt="" width="150" height="125" />`}<span
+          <img
+            class="game-option-art"
+            src="./assets/option-${k}.png"
+            alt=""
+            width="150"
+            height="125"
+          /><span
             ><strong>${games[k].name}</strong
             ><small>${games[k].sub}</small></span
           ><span class="game-option-check"
@@ -402,45 +349,6 @@ function renderGame(pool) {
     .join("");
   const group = $("#group-settings");
   group.hidden = state.mode !== "group";
-  document.body.classList.toggle(
-    "intersection-mode",
-    state.mode === "group" && state.game === "intersection",
-  );
-  if (state.mode === "group" && state.game === "intersection") {
-    group.hidden = true;
-    $("#game-badge").textContent = "OUR INTERSECTION · DEMO 3";
-    $("#board-status").textContent = "NICKNAME ONLY";
-    $("#game-actions").innerHTML = "";
-    $("#game-footnote").textContent =
-      "방의 점심 조건은 생성 시 고정돼요. 각자 다른 휴대폰에서 메뉴를 선택해 보세요.";
-    mountRoomFlow($("#game-stage"), {
-      getFilters: () => ({
-        location: state.location,
-        origin: state.origin,
-        budget: state.budget,
-        time: state.time,
-        distance: state.distance,
-        categories: [...state.categories],
-      }),
-      onChoose: (id, filters, people) => {
-        const m = filterMenus(filters).find((m) => m.id === id);
-        if (!m) {
-          toast("현재 CSV에서 이 메뉴의 식당을 찾지 못했어요.");
-          return;
-        }
-        Object.assign(state, filters);
-        state.people = people || state.people;
-        state.mode = "solo";
-        state.game = "gacha";
-        syncFilters();
-        finish(m);
-        switchView("restaurants");
-      },
-    });
-    return;
-  }
-  closeRoomFlow();
-
   if (state.mode === "group")
     group.innerHTML = /* HTML */ `<div class="group-line">
         <label
@@ -1054,7 +962,6 @@ async function drawAiMenu() {
 
 function switchView(view) {
   if (state.busy) return;
-  if (view !== "game") closeRoomFlow();
   state.view = view;
   $$(".view").forEach((e) => (e.hidden = e.id !== `view-${view}`));
   $$(".nav-item").forEach((e) =>
@@ -1069,8 +976,6 @@ function switchView(view) {
   );
   if (view === "restaurants") renderRestaurants();
   if (view === "saved") renderSaved();
-  if (view === "game" && state.game === "intersection")
-    renderGame(candidates());
   updateShell();
 }
 function restaurants() {
@@ -1466,62 +1371,21 @@ function openDialog(html) {
   if (!$("#app-dialog").open) $("#app-dialog").showModal();
 }
 function profileDialog() {
-  openDialog(
-    /* HTML */ `<div class="dialog-body">
-      <span class="section-index">HELLO, LUNCH MATE</span>
-      <h2 id="dialog-title">
-        ${state.profile ? "반가워요, " + esc(state.profile) + "님!" : "나만의 점심 취향을 모아보세요"}
-      </h2>
-      <p>
-        회원 흐름을 미리 보는 로컬 데모예요.<br />SNS 로그인과 실제 회원가입은
-        연결하지 않았어요.
-      </p>
-      <label for="nickname">어떻게 불러드릴까요?</label
-      ><input
-        id="nickname"
-        class="field"
-        maxlength="12"
-        placeholder="닉네임 (최대 12자)"
-        value="${esc(state.profile)}"
-      />
-      <p class="profile-note">
-        닉네임·찜·제외 메뉴는 이 브라우저에만 저장돼요.<br />게스트도 모든
-        게임을 이용할 수 있어요.
-      </p>
-      <div class="dialog-actions">
-        ${state.profile ? '<button class="secondary" data-action="logout">게스트로 사용</button>' : ""}<button
-          class="primary"
-          data-action="login"
-        >
-          닉네임 저장하고 시작하기 ↗
-        </button>
-      </div>
-    </div>`,
-  );
+  window.LunchRunProfile.open({
+    onChange(name) {
+      state.profile = name;
+      state.names[0] = name || "나";
+      persist();
+      render();
+      toast(
+        name
+          ? `${name}님, 오늘도 맛있는 점심 되세요!`
+          : "게스트 모드로 전환했어요. 취향은 이 브라우저에 유지돼요.",
+      );
+    },
+  });
 }
 
-$("#lunch-time").addEventListener("input", (e) => {
-  if (state.busy) return;
-  state.time = Number(e.target.value);
-  conditionsChanged();
-});
-$("#filters-form").addEventListener("submit", (e) => e.preventDefault());
-$("#budget").addEventListener("input", (e) => {
-  if (state.busy) return;
-  state.budget = Number(e.target.value);
-  conditionsChanged();
-});
-$("#distance").addEventListener("input", (e) => {
-  if (state.busy) return;
-  state.distance = Number(e.target.value);
-  conditionsChanged();
-});
-$("#location").addEventListener("change", (e) => {
-  if (state.busy) return;
-  state.location = e.target.value;
-  state.origin = null;
-  conditionsChanged();
-});
 $("#profile-btn").addEventListener("click", profileDialog);
 $("#close-dialog").addEventListener("click", () => $("#app-dialog").close());
 $("#app-dialog").addEventListener("click", (e) => {
@@ -1604,7 +1468,6 @@ document.addEventListener("click", async (e) => {
     state.pending = null;
     state.ladder = null;
     state.ladderStart = 0;
-    syncFilters();
     renderGame(candidates());
     navigateGameScreen("play");
     return;
@@ -1693,16 +1556,6 @@ document.addEventListener("click", async (e) => {
     conditionsChanged();
     toast("추천 조건을 초기화했어요.");
   }
-  if (b.id === "quick-pick") {
-    const m = pickMenu(candidates(), state.previous);
-    if (m) {
-      $("#conditions-dialog").close();
-      finish(m);
-      switchView("game");
-      navigateGameScreen("play");
-      toast("조건에 맞는 메뉴를 빠르게 골랐어요.");
-    }
-  }
   if (b.id === "all-menus") {
     openDialog(
       /* HTML */ `<div class="dialog-body">
@@ -1759,27 +1612,6 @@ document.addEventListener("click", async (e) => {
     );
   }
   if (action === "random-restaurant") await drawRestaurant();
-  if (action === "login") {
-    const name = $("#nickname").value.trim();
-    if (!name) {
-      toast("사용할 닉네임을 입력해 주세요.");
-      return;
-    }
-    state.profile = name;
-    state.names[0] = name;
-    persist();
-    $("#app-dialog").close();
-    render();
-    toast(`${name}님, 오늘도 맛있는 점심 되세요!`);
-  }
-  if (action === "logout") {
-    state.profile = "";
-    state.names[0] = "나";
-    persist();
-    $("#app-dialog").close();
-    render();
-    toast("게스트 모드로 전환했어요. 취향은 이 브라우저에 유지돼요.");
-  }
 });
 
 // Game selection and play have separate screens, with browser Back support.
@@ -1808,6 +1640,15 @@ window.addEventListener("hashchange", () => {
 // Page shell: shared condition summary and navigation around the game engine.
 function updateShell() {
   document.body.dataset.gameScreen = state.gameScreen;
+  const screenKey = [
+    state.view,
+    state.gameScreen,
+    state.mode,
+    state.game,
+    state.route,
+    state.result?.id ?? "unselected",
+  ].join(":");
+  window.LunchRunMotion?.enter($("#view-" + state.view), screenKey);
   const title =
     state.mode === "group"
       ? "함께 먹을 메뉴를 골라요"
@@ -1849,21 +1690,12 @@ document.addEventListener("click", (event) => {
     location.assign("/");
     return;
   }
-  const dialog = $("#conditions-dialog");
   if (action === "ai") {
-    resetRound();
-    state.mode = "ai";
-    state.game = "gacha";
-    conditionsChanged();
-    navigateGameScreen("play");
+    location.assign("/#ai");
     return;
   }
   if (action === "conditions") {
-    if (!dialog.open) dialog.showModal();
-    return;
-  }
-  if (action === "close-conditions") {
-    dialog.close();
+    openLocationSettings();
     return;
   }
   if (action === "game" || action === "game-selection") {
@@ -1887,11 +1719,16 @@ document.addEventListener("click", (event) => {
   updateShell();
 });
 
-$("#conditions-dialog").addEventListener("click", (event) => {
-  if (event.target === event.currentTarget) event.currentTarget.close();
-});
-
+const savedLocation = window.LunchRunLocation.read();
+if (
+  savedLocation &&
+  (!launch.settings.origin ||
+    (state.origin?.[0] === savedLocation.latitude &&
+      state.origin?.[1] === savedLocation.longitude))
+) {
+  state.location = savedLocation.name;
+  state.origin = [savedLocation.latitude, savedLocation.longitude];
+}
 updateProfile();
-syncFilters();
 render();
 if (launch.warning) toast(launch.warning);

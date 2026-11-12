@@ -392,41 +392,6 @@
   border-color: var(--orange);
 }
 
-#conditions-dialog {
-  width: min(460px, calc(100vw - 24px));
-  max-height: calc(100dvh - 40px);
-  padding: 0;
-  color: var(--text);
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  overflow-y: auto;
-}
-
-#conditions-dialog::backdrop {
-  background: #18213355;
-}
-
-.theme-white #conditions-dialog .sidebar {
-  display: block;
-  position: relative;
-  width: 100%;
-  height: auto;
-  min-height: 0;
-  padding: 34px 28px 28px;
-  background: #fff;
-  border: 0;
-  overflow: visible;
-}
-
-.conditions-close {
-  position: absolute;
-  top: 9px;
-  right: 12px;
-  padding: 2px 10px;
-  font-size: 28px;
-}
-
 .theme-white .main-footer {
   justify-content: center;
   margin-top: 28px;

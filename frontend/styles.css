@@ -5,6 +5,66 @@
   --muted: #607188;
   --scale: 1;
 }
+.app[data-view="ai"] .ai-chat {
+  height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+  background: #fff;
+}
+.chat-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+.chat-row.user {
+  align-items: flex-end;
+}
+.chat-time {
+  margin: 5px 8px 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.chat-bubble {
+  max-width: 80%;
+  padding: 14px 20px;
+  border-radius: 18px;
+  background: #f1f3f6;
+  font-size: 21px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chat-row.user .chat-bubble {
+  background: var(--orange);
+  color: #fff;
+}
+.chat-welcome {
+  font-size: 21px;
+  color: var(--muted);
+}
+.app[data-view="ai"] #screen > .ai-input-label {
+  display: block;
+  margin: 22px 0 12px;
+  font-size: 20px;
+}
+.ai-compose {
+  display: flex;
+  gap: 12px;
+}
+.ai-compose input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  font-size: 22px;
+}
+.app[data-view="ai"] #screen > .primary {
+  margin-top: 24px;
+}
 * {
   box-sizing: border-box;
 }
@@ -510,9 +570,13 @@ footer {
   margin-top: 36px !important;
 }
 .app[data-view="restaurants"] #screen {
-  top: 285px;
+  top: 345px;
   left: 65px;
   width: 1140px;
+}
+.app[data-view="restaurants"] #summary {
+  max-width: 1140px;
+  white-space: normal;
 }
 .restaurant-layout {
   display: grid;
@@ -827,8 +891,12 @@ footer {
   appearance: none;
   -webkit-appearance: none;
   background-image: none;
-  font-size: 44px;
-  font-weight: 700;
+  font-size: 22px;
+  line-height: 52px;
+  font-weight: 500;
+  border: 1px solid #e2e5e9;
+  border-radius: 10px;
+  background-color: #f8f9fb;
   text-align: center;
   text-align-last: center;
   min-width: 110px;
@@ -977,13 +1045,6 @@ footer {
   line-height: 1.5;
 }
 
-.app[data-view="ai"] #context {
-  display: block;
-  min-height: 240px;
-  max-height: 320px;
-  resize: vertical;
-}
-
 /* Mounted outside the scaled canvas so every page uses the same fixed dock. */
 #dock {
   position: fixed;
@@ -1045,4 +1106,25 @@ footer {
     font-size: 12px;
     border-radius: 12px;
   }
+}
+
+.app[data-view="ai"] .ai-compose {
+  margin-top: 18px;
+  width: 100%;
+}
+.app[data-view="ai"] #context {
+  display: block;
+  width: 100%;
+  height: 120px;
+  min-height: 120px;
+  max-height: 120px;
+  margin: 0;
+  padding: 4px 16px;
+  resize: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font-size: 22px;
+}
+.app[data-view="ai"] #screen > .primary {
+  margin-top: 64px;
 }

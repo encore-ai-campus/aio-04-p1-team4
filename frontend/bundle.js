@@ -50,7 +50,12 @@ const $ = (s) => document.querySelector(s),
     people: 1,
     category: "전체",
     origin: null,
-    end_time: "12:30",
+    end_time: new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Seoul",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date()),
     participant_menus: [],
     game: null,
     menu: null,
@@ -59,6 +64,64 @@ const $ = (s) => document.querySelector(s),
     route: null,
     context: "",
   };
+const settingsKey = "lunchrun-page-settings";
+const reloaded =
+  performance.getEntriesByType("navigation")[0]?.type === "reload";
+try {
+  if (reloaded) sessionStorage.removeItem(settingsKey);
+  else
+    Object.assign(
+      state,
+      JSON.parse(sessionStorage.getItem(settingsKey) || "{}"),
+    );
+} catch {}
+function saveSettings() {
+  try {
+    sessionStorage.setItem(settingsKey, JSON.stringify(state));
+  } catch {}
+}
+window.addEventListener("pagehide", saveSettings);
+state.chat ||= [];
+function consumeGameHandoff() {
+  try {
+    const handoff = JSON.parse(
+      sessionStorage.getItem("lunchrun-game-handoff") || "null",
+    );
+    if (!handoff || typeof handoff.menu !== "string" || !handoff.menu.trim())
+      return;
+    state.menu = handoff.menu.trim();
+    if (Number.isFinite(handoff.budget)) state.budget = handoff.budget;
+    if (Number.isFinite(handoff.time)) {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Seoul",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date());
+      const get = (type) =>
+        Number(parts.find((part) => part.type === type).value);
+      const total = (get("hour") * 60 + get("minute") + handoff.time) % 1440;
+      const endHour = String(Math.floor(total / 60)).padStart(2, "0");
+      const endMinute = String(total % 60).padStart(2, "0");
+      state.end_time = `${endHour}:${endMinute}`;
+    }
+    if (Number.isFinite(handoff.distance)) state.distance_m = handoff.distance;
+    if (Number.isFinite(handoff.people)) state.people = handoff.people;
+    if (typeof handoff.category === "string") state.category = handoff.category;
+    if (
+      Array.isArray(handoff.origin) &&
+      handoff.origin.length === 2 &&
+      handoff.origin.every(Number.isFinite)
+    ) {
+      state.origin = {
+        latitude: handoff.origin[0],
+        longitude: handoff.origin[1],
+      };
+    }
+    sessionStorage.removeItem("lunchrun-game-handoff");
+  } catch {}
+}
+consumeGameHandoff();
 let demo = true,
   busy = false;
 const escape = (s) =>
@@ -82,6 +145,7 @@ function payload() {
     menu: state.menu,
     game: state.game,
     context: state.context,
+    time: new Date().toISOString(),
     participant_menus: state.participant_menus,
     category: state.people > 1 ? "전체" : state.category,
     restaurants: undefined,
@@ -96,7 +160,12 @@ function invalidate() {
   state.route = null;
 }
 function go(r, gameSource = null) {
+  saveSettings();
   if (r === "backend-games") {
+    if (remainingLunch() < 10) {
+      showTimeRequiredDialog();
+      return;
+    }
     try {
       sessionStorage.setItem(
         "lunchrun-games-settings",
@@ -117,6 +186,16 @@ function go(r, gameSource = null) {
     location.assign("/games/");
     return;
   }
+  if (r === "restaurants" && !state.menu) {
+    $("#status").textContent = "게임에서 메뉴를 먼저 결정해주세요.";
+    return;
+  }
+  if (r === "route" && (!state.menu || !state.selected || !state.route)) {
+    $("#status").textContent = !state.menu
+      ? "메뉴를 먼저 결정해주세요."
+      : "식당 선택 화면에서 식당을 선택한 뒤 경로를 확인해주세요.";
+    return;
+  }
   if (["games", "group-input", "play"].includes(r) && state.people > 12) {
     $("#status").textContent =
       "12명 초과시 게임추천 서비스는 사용 할 수 없습니다.";
@@ -125,6 +204,31 @@ function go(r, gameSource = null) {
   history.pushState(null, "", "#" + r);
   render();
   window.scrollTo(0, 0);
+}
+
+function showTimeRequiredDialog() {
+  if (document.querySelector(".time-required-dialog")) return;
+  const dialog = document.createElement("dialog");
+  dialog.className = "location-dialog time-required-dialog";
+  dialog.setAttribute("aria-labelledby", "time-required-title");
+  dialog.innerHTML = `
+    <form method="dialog" class="location-dialog-form">
+      <h2 id="time-required-title">점심 종료시간을 설정 해주세요.</h2>
+      <p>남은 시간이 10분 미만 입니다.</p>
+      <button type="submit" class="location-apply">확인</button>
+    </form>
+  `;
+  document.body.appendChild(dialog);
+  dialog.querySelector("form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    dialog.close();
+    go("time");
+  });
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.addEventListener("close", () => dialog.remove(), { once: true });
+  dialog.showModal();
 }
 
 async function run(fn) {
@@ -165,6 +269,7 @@ function renderNavigation(route, stage) {
 }
 
 function render() {
+  saveSettings();
   const r = location.hash.slice(1) || "conditions";
   const app = document.querySelector(".app"),
     previous = app.dataset.view;
@@ -323,8 +428,10 @@ function render() {
       button("메뉴 뽑기", "draw", "primary");
   } else if (r === "ai") {
     title = "지금 나에게 맞는 메뉴";
+    const nickname = window.LunchRunProfile.readName() || "게스트";
     html =
-      `<label>날씨·기온·컨디션을 알려주세요<textarea id="context" rows="6" maxlength="1000">${escape(state.context)}</textarea></label><p class="muted">직접 입력 · 자동 날씨 연동 미확정</p>` +
+      `<div class="ai-chat" role="log" aria-label="AI와 대화" aria-live="polite">${state.chat.length ? state.chat.map((message) => `<div class="chat-row ${message.role}"><div class="chat-bubble">${message.role === "user" ? escape(message.name || nickname) : "✦ AI"} : ${escape(message.text)}</div><time class="chat-time">${message.time ? escape(new Date(message.time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })) : ""}</time></div>`).join("") : '<p class="chat-welcome">✦ AI : 안녕하세요. 오늘 먹고 싶은 음식이나 컨디션을 알려주세요.</p>'}</div>
+      <div class="ai-compose"><textarea id="context" aria-label="AI에게 메시지 입력" maxlength="1000" placeholder="날씨·기온·컨디션을 알려주세요">${escape(state.context)}</textarea><button type="button" data-action="chat" hidden></button></div>` +
       button("메뉴 추천받기", "recommend", "primary");
   } else if (r === "result") {
     title = "오늘의 점심 메뉴";
@@ -332,7 +439,10 @@ function render() {
   } else if (r === "restaurants") {
     if (demo && !state.restaurants.length) {
       state.menu ||= "김치찌개";
-      state.restaurants = demoRestaurants;
+      state.restaurants = demoRestaurants.map((restaurant) => ({
+        ...restaurant,
+        menu: state.menu,
+      }));
     }
     title = "이 메뉴를 먹을 수 있는 곳";
     html =
@@ -359,7 +469,7 @@ function render() {
             "</span></button>",
         )
         .join("") +
-      '</div><figure class="map-preview"><img src="assets/restaurants.png" alt="예시 식당 지도"><figcaption>예시 지도 · 실제 위치와 무관</figcaption></figure></div><div class="actions">' +
+      '</div><figure class="map-preview"><img src="assets/restaurants.png" alt="예시 식당 지도"></figure></div><div class="actions">' +
       button("식당 랜덤", "random") +
       button("OK · 경로 확인", "route", "primary") +
       "</div>";
@@ -368,10 +478,6 @@ function render() {
         "<p>후보가 없습니다. 조건을 변경해주세요.</p>" +
         button("식당 검색", "find");
   } else if (r === "route") {
-    if (demo && !state.route) {
-      state.selected = demoRestaurants[0];
-      state.route = { distance_m: 450, walk_minutes: 7 };
-    }
     title = "선택한 식당으로 출발";
     html = state.route
       ? '<div class="map"><div class="card route-summary"><strong>총소요예상 ' +
@@ -470,7 +576,7 @@ function render() {
       "afterbegin",
       '<figure class="map-preview">' +
         img("restaurants", "식당 위치 예시 지도") +
-        "<figcaption>예시 지도 · 실제 위치와 무관</figcaption></figure>",
+        "</figure>",
     );
   if (false)
     $("#screen .map").innerHTML =
@@ -578,8 +684,8 @@ document.addEventListener("click", (e) => {
     return;
   }
   run(async () => {
-    if (a === "draw" || a === "recommend") {
-      if (a === "recommend" && $("#context"))
+    if (a === "draw" || a === "recommend" || a === "chat") {
+      if ((a === "recommend" || a === "chat") && $("#context"))
         state.context = $("#context").value;
       if (!demo && !state.origin) throw Error("위치 설정을 먼저 해주세요.");
       const result = demo
@@ -593,6 +699,43 @@ document.addEventListener("click", (e) => {
       state.restaurants = [];
       state.selected = null;
       state.route = null;
+      if (a !== "draw") {
+        if (state.context.trim())
+          state.chat.push({
+            role: "user",
+            name: window.LunchRunProfile.readName() || "게스트",
+            text: state.context,
+            time: new Date().toISOString(),
+          });
+        state.chat.push({
+          role: "ai",
+          text: `${state.menu} 메뉴를 추천해요.`,
+          time: new Date().toISOString(),
+        });
+        state.context = "";
+        saveSettings();
+        if (a === "chat") {
+          render();
+          return;
+        }
+        sessionStorage.setItem(
+          "lunchrun-ai-result",
+          JSON.stringify({ name: state.menu }),
+        );
+        sessionStorage.setItem(
+          "lunchrun-games-settings",
+          JSON.stringify({
+            budget: state.budget,
+            time: remainingLunch(),
+            distance: state.distance_m,
+            people: state.people,
+            categories: state.category === "전체" ? [] : [state.category],
+            origin: state.origin,
+          }),
+        );
+        location.assign("/games/#play");
+        return;
+      }
       go("result");
     }
     if (a === "find") {
@@ -840,4 +983,18 @@ document.addEventListener("input", (e) => {
 });
 document.addEventListener("focusout", (e) => {
   if (e.target.id === "people-input") commitPeople();
+});
+
+// Enter sends a message; Shift+Enter keeps the textarea's native newline.
+document.addEventListener("keydown", (event) => {
+  if (
+    event.target.id !== "context" ||
+    event.key !== "Enter" ||
+    event.shiftKey ||
+    event.isComposing
+  )
+    return;
+  event.preventDefault();
+  if (!busy && event.target.value.trim())
+    document.querySelector('[data-action="chat"]')?.click();
 });

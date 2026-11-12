@@ -92,6 +92,9 @@ function takeLaunchSettings() {
 }
 const prefs = read("lunchrun-demo2", {});
 const launch = takeLaunchSettings();
+if (performance.getEntriesByType("navigation")[0]?.type === "reload") {
+  sessionStorage.removeItem("lunchrun-page-settings");
+}
 const state = {
   gameScreen: location.hash === "#play" ? "play" : "select",
   view: "game",
@@ -328,9 +331,8 @@ function renderGame(pool) {
     .map(
       (k) =>
         /* HTML */ `<button
-          class="game-option ${state.game === k ? "active" : ""}"
+          class="game-option"
           data-game="${k}"
-          aria-pressed="${state.game === k}"
         >
           <img
             class="game-option-art"
@@ -716,7 +718,6 @@ function renderResult() {
   $("#game-stage").innerHTML = /* HTML */ `<div class="result-scene">
     <div class="confetti">✳ <span>✦</span> ✳</div>
     <span class="result-kicker">TODAY’S LUCKY LUNCH</span>
-    <div class="result-emoji">${m.emoji}</div>
     <h3 class="result-title">${esc(m.name)}</h3>
     <p class="result-desc">${esc(m.desc)}</p>
     <div class="result-stats">${menuStats(m)}</div>
@@ -731,6 +732,10 @@ function renderResult() {
     "메뉴가 마음에 들면, 근처 식당을 골라보세요.";
 }
 async function play(source) {
+  if (state.time < 10) {
+    showTimeRequiredDialog();
+    return;
+  }
   if (state.busy) return;
   if (state.mode === "group" && state.game === "roulette") {
     const entries = gs.entries.slice(0, state.people).map((v) => v.trim());
@@ -1458,6 +1463,10 @@ document.addEventListener("click", async (e) => {
     return;
   }
   if (d.game) {
+    if (state.time < 10) {
+      showTimeRequiredDialog();
+      return;
+    }
     resetRound();
     state.game = d.game;
     if (d.game === "ladder" && state.people > 8) {
@@ -1584,6 +1593,10 @@ document.addEventListener("click", async (e) => {
     renderGame(candidates());
   }
   if (action === "again") {
+    if (state.mode === "ai") {
+      location.assign("/#ai");
+      return;
+    }
     resetRound();
     state.result = null;
     state.pending = null;
@@ -1591,8 +1604,7 @@ document.addEventListener("click", async (e) => {
     renderGame(candidates());
   }
   if (action === "find") {
-    switchView("restaurants");
-    updateShell();
+    openMainRestaurants();
   }
   if (action === "back-game") {
     switchView("game");
@@ -1616,6 +1628,7 @@ document.addEventListener("click", async (e) => {
 
 // Game selection and play have separate screens, with browser Back support.
 function navigateGameScreen(screen) {
+  if (screen === "select") sessionStorage.removeItem("lunchrun-ai-screen");
   if (screen === "select" && state.mode === "ai") {
     state.mode = state.people > 1 ? "group" : "solo";
     state.game = state.people > 1 ? "roulette" : "gacha";
@@ -1682,6 +1695,56 @@ function updateShell() {
   });
 }
 
+function openMainRestaurants() {
+  if (!state.result || state.result.entryOnly) {
+    toast("게임에서 메뉴를 먼저 결정해주세요.");
+    return;
+  }
+  try {
+    sessionStorage.setItem(
+      "lunchrun-game-handoff",
+      JSON.stringify({
+        menu: state.result.name,
+        budget: state.budget,
+        time: state.time,
+        distance: state.distance,
+        people: state.people,
+        category: state.categories.join(" · ") || "전체",
+        origin: state.origin,
+      }),
+    );
+  } catch {
+    toast("메뉴 정보를 식당 선택 화면으로 전달하지 못했어요.");
+    return;
+  }
+  location.assign("/#restaurants");
+}
+
+function showTimeRequiredDialog() {
+  if (document.querySelector(".time-required-dialog")) return;
+  const dialog = document.createElement("dialog");
+  dialog.className = "location-dialog time-required-dialog";
+  dialog.setAttribute("aria-labelledby", "time-required-title");
+  dialog.innerHTML = /* HTML */ `
+    <form method="dialog" class="location-dialog-form">
+      <h2 id="time-required-title">점심 종료시간을 설정 해주세요.</h2>
+      <p>남은 시간이 10분 미만 입니다.</p>
+      <button type="submit" class="location-apply">확인</button>
+    </form>
+  `;
+  document.body.appendChild(dialog);
+  dialog.querySelector("form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    dialog.close();
+    location.assign("/#time");
+  });
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.addEventListener("close", () => dialog.remove(), { once: true });
+  dialog.showModal();
+}
+
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-shell]");
   if (!button || state.busy) return;
@@ -1707,6 +1770,10 @@ document.addEventListener("click", (event) => {
       toast("게임에서 메뉴를 먼저 결정해주세요.");
       return;
     }
+    if (action === "restaurants") {
+      openMainRestaurants();
+      return;
+    }
     if (action === "route" && !state.restaurantDrawDone) {
       toast(
         "식당 선택 화면에서 식당을 추첨하거나 경로 확인 버튼을 눌러주세요.",
@@ -1719,6 +1786,22 @@ document.addEventListener("click", (event) => {
   updateShell();
 });
 
+window.addEventListener("pagehide", () => {
+  if (state.mode === "ai" && state.result && state.gameScreen === "play") {
+    sessionStorage.setItem(
+      "lunchrun-ai-screen",
+      JSON.stringify({
+        result: state.result,
+        budget: state.budget,
+        time: state.time,
+        distance: state.distance,
+        people: state.people,
+        categories: state.categories,
+        origin: state.origin,
+      }),
+    );
+  }
+});
 const savedLocation = window.LunchRunLocation.read();
 if (
   savedLocation &&
@@ -1728,6 +1811,38 @@ if (
 ) {
   state.location = savedLocation.name;
   state.origin = [savedLocation.latitude, savedLocation.longitude];
+}
+try {
+  const aiResult = JSON.parse(
+    sessionStorage.getItem("lunchrun-ai-result") || "null",
+  );
+  sessionStorage.removeItem("lunchrun-ai-result");
+  if (aiResult?.name) {
+    state.mode = "ai";
+    state.gameScreen = "play";
+    state.result = MENUS.find((menu) => menu.name === aiResult.name) || {
+      id: "ai-result",
+      name: aiResult.name,
+      desc: "AI가 추천한 메뉴예요.",
+      price: state.budget,
+      meal: 20,
+      wait: 0,
+      distance: 0,
+      offers: [],
+    };
+  }
+} catch {}
+if (
+  performance.getEntriesByType("navigation")[0]?.type === "reload" &&
+  location.hash === "#play"
+) {
+  try {
+    const saved = JSON.parse(
+      sessionStorage.getItem("lunchrun-ai-screen") || "null",
+    );
+    if (saved?.result)
+      Object.assign(state, saved, { mode: "ai", gameScreen: "play" });
+  } catch {}
 }
 updateProfile();
 render();

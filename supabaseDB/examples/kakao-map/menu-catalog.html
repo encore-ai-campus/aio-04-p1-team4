@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>금천구 음식점 메뉴 · LUNCH RUN</title>
+  <link rel="stylesheet" href="styles.css?v=cuisine-20261107"><link rel="stylesheet" href="menu-catalog.css?v=cuisine-20261107">
+</head>
+<body class="catalog-page">
+  <header><a class="brand" href="/"><span class="brand-icon">↗</span>LUNCH RUN<span class="brand-dot">.</span></a><a href="/">지도로 돌아가기 ↗</a></header>
+  <main class="catalog-main">
+    <section class="catalog-intro">
+      <p class="eyebrow">금천구 음식점</p><h1>오늘 먹을 메뉴를 찾아요<span>.</span></h1>
+      <p>식당 이름, 메뉴 또는 주소로 검색하세요.</p>
+      <div id="catalog-stats" class="catalog-stats"></div>
+      <p id="catalog-note" class="catalog-note"></p>
+    </section>
+    <form id="catalog-search" class="catalog-search" role="search">
+      <label for="catalog-query">식당·메뉴·주소</label><input id="catalog-query" type="search" placeholder="예: 김치찌개, 독산, 조여사네집">
+      <label for="catalog-status">메뉴 확인 상태</label>
+      <select id="catalog-status"><option value="with-menu">메뉴 있는 가게</option><option value="without-menu">메뉴 없는 가게</option><option value="all">모든 가게</option></select>
+      <label for="catalog-cuisine">음식 종류</label><select id="catalog-cuisine"></select>
+      <button type="button" id="catalog-download">검색 결과 CSV 저장 ↓</button>
+    </form>
+    <div class="catalog-result-heading"><h2 id="catalog-result-count" aria-live="polite"></h2><span>가게명 가나다순</span></div>
+    <section id="catalog-results" class="catalog-results" aria-label="음식점 메뉴 검색 결과"></section>
+    <nav class="catalog-pagination" aria-label="검색 결과 페이지"><button id="catalog-prev">← 이전</button><span id="catalog-page-number"></span><button id="catalog-next">다음 →</button></nav>
+  </main>
+  <script src="cuisine.js?v=20261108-cuisine-options"></script><script src="menu-catalog.js?v=20261112-api-only"></script>
+</body>
+</html>

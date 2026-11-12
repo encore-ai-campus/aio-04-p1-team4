@@ -1,0 +1,11 @@
+# DB 구성·카카오 저장 코드·오프라인 DB 테스트에 필요한 최소 의존성.
+SQLAlchemy>=2.0,<3
+alembic>=1.13,<2
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+python-dotenv>=1,<2
+httpx>=0.27,<1
+playwright>=1.40,<2
+pytest>=8,<10
+
+psycopg[binary]>=3.2,<4

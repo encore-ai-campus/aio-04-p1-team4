@@ -1,0 +1,14 @@
+.venv/
+.venv-db/
+venv/
+__pycache__/
+*.pyc
+.env
+*.log
+*.py[cod]
+.pytest_cache/
+.db
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/backups/

@@ -1,0 +1,157 @@
+[
+  {
+    "path": "examples/kakao-map/app.js",
+    "sha256": "7cadefe4bf3b032c0196461d471af45fc7dc4e51f6581659919c388d9ff607c1",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "examples/kakao-map/db-details.js",
+    "sha256": "5ac0ea629f4e78a0438b10a27da2ae1a3335e99b015672900853f2ad2e8f0ed5",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "examples/kakao-map/index.html",
+    "sha256": "b72445df558e28e2d1c8a2047c0498754319cfc3a65262baf4f31a53e65d633a",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "examples/kakao-map/live-config.js",
+    "sha256": "16bbd99202ae5a9c9389c7c40dc250a2cdab56b0d837dbe2ac5eca13710aa493",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "examples/kakao-map/menu-catalog.html",
+    "sha256": "9482f224cf785a27c7cd35613307a9a294069a92ac8d10a55c3820c7153d9ad2",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "examples/kakao-map/menu-catalog.js",
+    "sha256": "b80ce3b9352822f22d7edbb217921259bf7938f453e66f3ba685a8dc46c12d39",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "examples/kakao-map/styles.css",
+    "sha256": "2d1fe1f02bf8242ae4a611b5f784c42c0ff00ab1e9ca2b5d051fedf13eb6ebd7",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "examples/kakao-map/package_example.py",
+    "sha256": "8da497adc05e2e3189520c1f3d13b15f2af276b4774f0d5ecdd037724037a328",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/app/map_api.py",
+    "sha256": "8eb0b738a625d2123fc91e1174f675d6540474466083cb31f79a271fa9507b9b",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/app/collectors/kakao_place.py",
+    "sha256": "da3165c557ec55eb30be59970b703812fa0cb74939bf2bdb3c3776495dfc7759",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/app/database/cli.py",
+    "sha256": "55704cafae7eb3e9fd8801d1a64759824f6af5f0f501aa88933ef1e4aae78a90",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/app/database/models.py",
+    "sha256": "84418225cb3c6d4213939a612ccaba690987f75ffca43c428f0685ca6f4e97b1",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/app/database/session.py",
+    "sha256": "3419729c9a61a655467c76af2d527dce0da68995075194b89a2f2b0758b0782a",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/app/repositories/place_details.py",
+    "sha256": "ba867379f6ccd94b51f730e40619dd94132629e07dd07c80ae0988efbabc531b",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/app/detail_collection.py",
+    "sha256": "549972741b1ec08ca32ba130cf75191df0ac7fa60a2fa336847cd081114aa53b",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/app/place_details.py",
+    "sha256": "b9caeb46c1550e27a4d24ab9e7da8199080fc2f2a17c9947235d6a43030e13e5",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/alembic/env.py",
+    "sha256": "45f0106053fff02699737463295e248fff63c138e143d72924173a4a08043ee5",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/alembic/versions/0003_detail_sources.py",
+    "sha256": "d22983088f975f954469ed30acc86fae32efc07ad132590b4c522d6a432c6978",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/alembic/versions/0004_basic_source.py",
+    "sha256": "c9e320f45ebed095804677b73183978eee4c6cf82a010262ea2375164c0d64b8",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/alembic/versions/0005_server_only_rls.py",
+    "sha256": "b4adbb94213ce45dfad4a15d90413faafa622492a18ff2c7e7a8c6a43527f6d7",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/db_manage.py",
+    "sha256": "259a21476c6185e39f8ebd1757000281b6d32102c83c5ff965fa4f9cc3f74902",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/run_map_site.py",
+    "sha256": "6f151b4e83f5bb9e55065e890e5746d7ad5dcbbcd93334ffe30151f7cae8bcbc",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/supabase_manage.py",
+    "sha256": "ae72868a544fb93a1ca25153bcf9bc943ede44de12226f7822a1ddc18bc190e2",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/requirements-db.txt",
+    "sha256": "fee5b7bc97d49af50f16869c6dc14ae3dedf433fa02fa84f0036b80ba6082101",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/tests/test_db_cli.py",
+    "sha256": "37e602c0fa326ecfcfc721baa17b812368c96777a4af4602f6f66ab780e71993",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/tests/test_map_api.py",
+    "sha256": "2e39ab4054553bbb772ae1d7b050e6404d5c91739711602793e0c0b534c2bac9",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/tests/test_database.py",
+    "sha256": "6a3f7fd412f05015af157e4b0963d3b8bd9cb97901e7c64bda42ddd17ba99101",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/tests/test_supabase_setup.py",
+    "sha256": "e99118c3af45e7cd111194e97689d5a326540ac6d213ca1d95ddb17c953691db",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/DB구축_시작하기.txt",
+    "sha256": "cc2ae79429b5f17c360c7c3272e5757ee920a32913fe2eed288b42f9cdf66483",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "khj_backend/.gitignore",
+    "sha256": "604365c9b3fd8097fb475fe955158f6f0a9008fa2fb9928d37e71da1f9d97fd6",
+    "kind": "오늘 추가 또는 수정한 파일"
+  },
+  {
+    "path": "start_site.cmd",
+    "sha256": "10de4f25543ad623506f9323f6f9bcfdf1653be48222c7bac1ee5b4dfdadc5f4",
+    "kind": "오늘 추가 또는 수정한 파일"
+  }
+]

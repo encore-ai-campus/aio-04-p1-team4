@@ -1,0 +1,188 @@
+SQLite + SQLAlchemy + Alembic DB 구축
+
+현재 위치
+  프로젝트: C:\Users\Playdata\project1\khj_backend
+  DB 파일: data/lunchrun.db
+  ORM 모델: app/database/models.py
+  DB 연결·세션·외래키 설정: app/database/session.py
+  최초 스키마: alembic/versions/0001_initial_schema.py
+  음식 분류 변경: alembic/versions/0002_catalog_food_types.py
+  초기 메뉴/별칭: app/database/seed.py
+  실행 도구: db_manage.py, app/database/cli.py
+  실제 CREATE TABLE SQL: data/schema.sql
+
+1. 설치와 초기화 (PowerShell)
+  cd C:\Users\Playdata\project1\khj_backend
+  python -m venv .venv-db
+  .\.venv-db\Scripts\python.exe -m pip install -r requirements-db.txt
+  .\.venv-db\Scripts\python.exe db_manage.py init
+
+  현재 컴퓨터에는 위 DB 전용 가상환경과 DB가 이미 준비되어 있습니다.
+  init은 Alembic upgrade head를 실행한 후 기본 추천 메뉴와 별칭을 추가합니다.
+  반복 실행해도 기존 식당이나 메뉴를 삭제하지 않고 중복 시드도 추가하지 않습니다.
+  이 의존성 목록은 DB 작업용입니다. 전체 웹 서버 실행 환경은 requirements.txt를 사용합니다.
+
+2. 생성되는 테이블
+  menu_catalog
+    대표 추천 메뉴: id, name, cuisine, search_keyword, price_hint, active.
+    정규화된 이름, 설명, 생성·수정 시각도 기존 ORM 모델에 포함되어 있습니다.
+    price_hint는 추천 후보를 좁히는 예시 기준값이며 실제 식당 가격이 아닙니다.
+  menu_alias
+    menu_catalog_id FK, name, normalized_name. 별도 행 id가 PK입니다.
+    예: 자장면 → 짜장면. 별칭의 정규화된 이름은 고유합니다.
+  restaurant
+    카카오 장소 id(문자열) PK, name, latitude, longitude, address, place_url.
+    기존 모델에는 category_name, cuisine, updated_at도 포함되어 있습니다.
+  menu
+    restaurant_id FK, name, normalized_name, price, price_status. 행 id가 PK입니다.
+    price는 원 단위 정수, 미확인 가격은 NULL입니다.
+    price_status: known=확인 가격, missing=가격 미확인, variable=시가·변동 가격.
+    같은 식당의 normalized_name은 중복을 허용하지 않습니다.
+  business_hours
+    restaurant_id FK, day_of_week, holiday, start_time, end_time, ends_next_day, sequence.
+    행 id와 last_order_time도 기존 모델에 포함되어 있습니다.
+    월=0, 화=1, ... 일=6. 한 요일의 구간은 sequence=0,1,...로 구분합니다.
+    브레이크타임 14~17시가 있으면 11~14시와 17~22시 두 행으로 저장합니다.
+    18~다음날 02시는 ends_next_day=True입니다.
+    holiday=True는 확인된 휴무이고, 휴무 행에는 시작·종료 시각을 넣지 않습니다.
+    시간이 미확인이면 임의로 24시간 영업이나 휴무로 저장하지 않습니다.
+  place_detail_status
+    restaurant_id PK/FK, menu_status, hours_status, last_attempt_at, last_success_at.
+    상태: pending, success, missing, fetch_failed, parse_failed.
+    error_code에는 통제된 오류 코드만 저장합니다.
+    수집 시각은 UTC로 다루고, 한국 시각 표시는 화면에서 Asia/Seoul로 변환합니다.
+  alembic_version
+    version_num. Alembic이 관리하며 직접 insert하지 않습니다.
+
+관계
+  menu_catalog 1 ─ N menu_alias
+  restaurant   1 ─ N menu
+  restaurant   1 ─ N business_hours
+  restaurant   1 ─ 0..1 place_detail_status
+
+3. 저장과 조회를 직접 확인하기
+  .\.venv-db\Scripts\python.exe db_manage.py summary
+  .\.venv-db\Scripts\python.exe db_manage.py load-json sample_data/kakao_place_example.json
+  .\.venv-db\Scripts\python.exe db_manage.py show 965494663
+  .\.venv-db\Scripts\python.exe db_manage.py search 토스트
+  .\.venv-db\Scripts\python.exe db_manage.py catalog 자장면
+
+  예제는 기존 웹 자료의 토스트카페이순신(카카오 ID 965494663), 실제 수집 메뉴 5개,
+  영업 구간 7개입니다. 실시간 재조회가 아니며 원본 확인 시각을 유지합니다.
+  서로 다른 메뉴·시간 확인일은 보수적으로 더 이른 시각을 공통 성공 시각으로 사용했습니다.
+  같은 JSON을 다시 저장하면 식당을 갱신하고 상세 메뉴·시간을 교체하여 중복을 막습니다.
+  다른 DB에 실습하려면 --db 옵션을 명령 앞에 넣으세요.
+  .\.venv-db\Scripts\python.exe db_manage.py --db data/practice.db init
+
+4. 카카오맵 연결 흐름
+  카카오 JavaScript SDK → 지도에 핀 표시
+  카카오 REST 장소 검색 → FastAPI 서버 → save_restaurants() → restaurant 저장
+  따로 확인한 메뉴·영업시간 → parse_place_page() → save_place_details() → 상세 테이블 저장
+  SQLAlchemy Session / SELECT → JSON 응답 → 화면 표시
+
+  카카오 REST 키는 서버의 MAP_API_KEY 설정으로 사용합니다. JavaScript 키와 구분합니다.
+  기존 통신 코드: app/clients/kakao.py
+  기본정보 저장: app/repositories/restaurants.py
+  상세정보 저장: app/repositories/place_details.py
+  서버 API: app/api.py
+
+  load-json은 카카오 장소 검색의 documents 배열을 받습니다.
+  documents의 x는 경도(longitude), y는 위도(latitude)입니다.
+  details는 카카오 장소 검색 API의 응답 필드가 아니라, 별도로 확인한 정보를 넣는
+  이 프로젝트의 입력 형식입니다. sample_data/kakao_place_example.json을 참고하세요.
+  메뉴·가격·영업시간이 장소 검색 API에서 자동 제공되는 것으로 가정하지 않습니다.
+  네이버 전용 ID나 license: 형식의 내부 ID를 카카오 PK 자리에 넣지 않습니다.
+  기존 웹 자료 전체는 일괄 가져오지 않습니다. 선택한 카카오 가게부터 DB에 저장합니다.
+  localhost:5500 화면은 아래의 지도·DB 통합 서버로 실행합니다.
+
+5. 모델을 변경할 때
+  ORM 모델 수정 후 아래 명령으로 마이그레이션을 생성하고 내용을 검토합니다.
+  .\.venv-db\Scripts\python.exe -m alembic revision --autogenerate -m "change schema"
+  .\.venv-db\Scripts\python.exe -m alembic upgrade head
+  .\.venv-db\Scripts\python.exe -m alembic check
+
+  이미 create_all로 만든 DB가 있다면 기존 스키마와 데이터부터 확인해야 합니다.
+  스키마 확인 없이 임의로 stamp head하거나 DB 파일을 지워서 맞추지 마세요.
+  외래키 CASCADE와 한 식당의 메뉴·영업시간 중복 제약은 ORM과 DB에 적용되어 있습니다.
+
+6. 검증
+  .\.venv-db\Scripts\python.exe -m pytest tests/test_database.py tests/test_restaurant_repository.py tests/test_place_details.py tests/test_db_cli.py -q --basetemp tmp/db-check -o cache_dir=tmp/pytest-db-cache
+  테스트는 별도의 임시 DB에서 진행합니다. DB 무결성, 삭제 연쇄, Alembic 스키마 일치,
+  재저장 중복 방지, 별칭 검색, 가격·시간 파싱, 실패 시 정상 데이터 보존을 확인합니다.
+
+공식 참고 문서
+  https://docs.sqlalchemy.org/en/20/dialects/sqlite.html
+  https://alembic.sqlalchemy.org/en/latest/tutorial.html
+  https://developers.kakao.com/docs/ko/local/dev-guide
+
+
+7. 카카오 상세페이지 → DB → 지도 핀 연결 (2026-11-12)
+  프로젝트 루트의 start_site.cmd를 실행하고 http://127.0.0.1:8000 을 엽니다.
+  같은 서버가 http://localhost:5500 도 제공합니다. 두 주소는 같은 DB/수집 잠금을 공유합니다.
+  8000이 다른 서비스에서 사용 중이면 그 서비스는 유지하며 5500만 제공합니다.
+  직접 실행: khj_backend 폴더에서
+  .\.venv-db\Scripts\python.exe run_map_site.py
+  최초 준비: .\.venv-db\Scripts\python.exe -m pip install -r requirements-db.txt
+  수집 브라우저 준비: .\.venv-db\Scripts\python.exe -m playwright install chromium
+
+  숫자로 된 카카오 ID의 핀/목록을 누르면 restaurant 기본정보를 저장하고,
+  서버가 해당 place_url의 공개 페이지를 렌더링해 menu와 business_hours에 저장합니다.
+  첫 화면의 자동 선택은 DB 조회만 합니다. 처음 확인하는 핀은 수집에 잠시 걸릴 수 있습니다.
+  메뉴는 일반 매장 메뉴를 우선하며 가격이 없으면 가격 확인 필요로 표시합니다.
+  이미지에만 있는 메뉴는 텍스트로 자동 판독하지 않습니다.
+  정보가 없으면 missing, 접속 실패는 fetch_failed, 해석 불가는 parse_failed로 기록합니다.
+  실패 시 이전에 저장한 정상 메뉴·시간·출처·확인일은 보존합니다.
+  네이버 전용 내부 ID는 기존 자료를 표시하며 카카오 PK로 변환하지 않습니다.
+
+  GET /api/restaurants/{카카오ID}: DB 상세정보
+  POST /api/restaurants/{카카오ID}/details: 기본정보 저장 및 필요한 경우 수집
+  JSON: {"name":"가게명","lat":37.48,"lng":126.88,"address":"주소","category":"음식점 > 한식"}
+  place_url은 임의 URL을 받지 않고 서버가 공식 카카오 ID 주소로 만듭니다.
+  ?refresh=true 는 마지막 시도 후 최소 60초가 지난 경우 다시 수집합니다.
+  정상/정보없음은 7일, 실패는 1시간 캐시. 동시 수집 최대 2개, 동일 가게 중복 실행 방지.
+  항목별 menu_source_url/hours_source_url 및 menu_checked_at/hours_checked_at을 보관합니다.
+  영업 여부는 최근 7일 내 확인한 정상 시간표 기준이며 실시간 방문자/임시휴무 보장은 아닙니다.
+  DB: khj_backend/data/lunchrun.db, 스키마 버전: 0003_detail_sources
+  현재 등록된 http://127.0.0.1:8000 을 사용할 수 있습니다.
+  localhost:5500에서도 실제 지도를 보려면 JavaScript SDK 도메인에 그 주소도 등록합니다.
+  127.0.0.1과 localhost, 포트 8000과 5500은 각각 다른 출처입니다.
+  REST 키는 브라우저에 보내지 않습니다. JavaScript 키만 /config.json으로 제공합니다.
+
+
+8. CSV 제외 (2026-11-12)
+  지도는 카카오 JavaScript Places API 검색 결과만 사용합니다.
+  기존 data.js, nearby-data.js, menus.js, cuisine-data.js, business-hours-data.js를 불러오지 않습니다.
+  기본정보는 카카오 API → 웹 선택 → restaurant에 저장하며 basic_source=kakao_api로 구분합니다.
+  이전 DB 행은 삭제하지 않고 API로 다시 확인하기 전까지 조회 목록에서 제외합니다.
+  메뉴 검색 화면도 /api/menu-catalog의 DB 자료만 조회합니다.
+  메뉴·영업시간은 공식 place_url 출처가 기록된 수집 결과만 표시합니다.
+  원본 CSV 파일이나 과거 자료는 삭제하지 않습니다.
+  스키마 버전: 0004_basic_source
+
+
+9. Supabase PostgreSQL 연결
+  프로젝트 루트 .env의 SUPABASE_DB_URL에 Connect → Session pooler 연결 문자열을 저장합니다.
+  실제 DB 비밀번호가 필요합니다. Publishable Key와 DB 비밀번호는 다릅니다.
+  DATABASE_URL이 있으면 SUPABASE_DB_URL보다 우선합니다.
+  서버가 SSL과 psycopg 드라이버를 사용하며 비밀 연결 문자열은 웹에 전달하지 않습니다.
+  DB 비밀번호의 특수문자는 연결 문자열에서 URL 인코딩해야 합니다.
+
+  khj_backend 폴더에서 실행:
+  .\.venv-db\Scripts\python.exe supabase_manage.py check
+  .\.venv-db\Scripts\python.exe supabase_manage.py init
+  .\.venv-db\Scripts\python.exe supabase_manage.py copy-sqlite
+
+  copy-sqlite는 basic_source=kakao_api인 가게만 이전합니다. CSV·인허가 유래 미확인 자료는 제외합니다.
+  Supabase에 같은 ID의 가게가 이미 있으면 덮어쓰지 않고 건너뜁니다.
+  연결 완료 후 start_site.cmd를 다시 실행하면 새 메뉴·시간 수집은 Supabase에 저장됩니다.
+  /api/health의 database가 postgresql이면 Supabase PostgreSQL 사용 중입니다.
+  PostgreSQL 스키마 생성 시 RLS를 켜며 브라우저 직접 조회 정책은 만들지 않습니다.
+  화면은 FastAPI 서버를 통해서만 조회·저장합니다. 스키마 버전: 0005_server_only_rls
+  인증 실패 시 현재 서버를 재시작하기 전에 .env의 DB 비밀번호를 수정해 확인하세요.
+
+
+  2026-11-12: 사용자 요청으로 Supabase의 앱 테이블 7개를 초기화하고 서버를 PostgreSQL로 전환했습니다.
+  기존 SQLite 식당 자료는 이전하지 않았습니다. 새로 선택한 가게부터 Supabase에 저장합니다.
+  전체 초기화 명령: .\.venv-db\Scripts\python.exe supabase_manage.py reset
+  reset은 위 7개 앱 테이블의 데이터를 삭제하므로 명시적으로 초기화할 때만 실행합니다.
+  PostgreSQL에서는 DROP과 마이그레이션·기본 카탈로그 생성을 하나의 트랜잭션으로 처리합니다.

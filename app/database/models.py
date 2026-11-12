@@ -18,6 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     false,
     func,
+    true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -36,6 +37,70 @@ class Base(DeclarativeBase):
     """모든 ORM 테이블이 공유하는 SQLAlchemy 선언형 기반 클래스."""
 
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+
+class MenuCatalog(Base):
+    """랜덤 추천과 카카오 검색에 사용하는 대표 메뉴 사전.
+
+    식당 상세페이지에서 수집한 실제 메뉴는 ``Menu``에 저장한다. 이 테이블의
+    가격은 실제 매장 가격이 아니라 DB 정보가 부족할 때 후보를 좁히는 기준값이다.
+    """
+
+    __tablename__ = "menu_catalog"
+    __table_args__ = (
+        CheckConstraint("price_hint IS NULL OR price_hint >= 0", name="price_hint_nonnegative"),
+        CheckConstraint(
+            "cuisine IN ('한식', '중식', '일식', '양식', '샐러드')",
+            name="cuisine_value",
+        ),
+        Index("ix_menu_catalog_filter", "active", "cuisine", "price_hint"),
+    )
+
+    # 기존 데모 메뉴 ID를 유지해 이후 채팅 경로 전환 시 사용자 상태를 이어갈 수 있다.
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    normalized_name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    cuisine: Mapped[str] = mapped_column(String(20), nullable=False)
+    search_keyword: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    # price_hint는 카탈로그 필터용 기준값이며 실제 식당 가격으로 출력하지 않는다.
+    price_hint: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.current_timestamp()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp()
+    )
+
+    aliases: Mapped[list[MenuAlias]] = relationship(
+        back_populates="catalog",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class MenuAlias(Base):
+    """돈가스/돈까스처럼 같은 대표 메뉴를 가리키는 검색용 이름."""
+
+    __tablename__ = "menu_alias"
+    __table_args__ = (
+        # 하나의 별칭이 여러 대표 메뉴를 가리키면 자동 연결 결과가 모호해지므로 막는다.
+        UniqueConstraint("normalized_name", name="normalized_name"),
+        Index("ix_menu_alias_catalog", "menu_catalog_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    menu_catalog_id: Mapped[str] = mapped_column(
+        ForeignKey("menu_catalog.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    catalog: Mapped[MenuCatalog] = relationship(back_populates="aliases")
 
 
 class Restaurant(Base):

@@ -1,0 +1,148 @@
+/* Shared header for the main app and standalone game screens. */
+body .site-header.topbar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  max-width: 1280px;
+  height: 76px;
+  margin: 0 auto;
+  padding: 0 36px;
+  background: #fff;
+  border: 0;
+  border-bottom: 1px solid #e5e7eb;
+  color: #182133;
+  font-family: "Noto Sans KR", "Malgun Gothic", sans-serif;
+}
+
+body .site-header.main-site-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+}
+
+/* The standalone app previously reserved this space through normal flow. */
+.theme-white .app-shell {
+  padding-top: 76px;
+}
+
+/* Clip only the animated view's visual overflow, not document scrolling.
+   This prevents a temporary scrollbar while the view slides into place. */
+.theme-white #main {
+  overflow: clip;
+}
+
+.screen-enter {
+  animation: screen-slide-in 520ms ease-out both;
+}
+
+@keyframes screen-slide-in {
+  from {
+    transform: translateY(56px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-enter {
+    animation: none;
+  }
+}
+
+body .site-header .brand {
+  position: static;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+body .site-header .brand img {
+  display: block;
+  width: 150px;
+  height: auto;
+}
+
+body .site-header .header-tools {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+body .site-header .header-tools > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: #182133;
+  font:
+    500 13px/1.6 "Noto Sans KR",
+    "Malgun Gothic",
+    sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+body .site-header .location-icon {
+  display: block;
+  width: 32px;
+  height: 32px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+
+body .site-header .header-tools .location-label {
+  font-size: 13px;
+}
+
+body .site-header .avatar {
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  border-radius: 50%;
+  background: #f1f3f7;
+  color: #7b8493;
+  font: 600 13px/1 sans-serif;
+}
+
+body .site-header .profile-label {
+  margin-left: 8px;
+  color: #72829b;
+}
+
+body .site-header [hidden] {
+  display: none !important;
+}
+
+@media (max-width: 760px) {
+  .theme-white .app-shell {
+    padding-top: 64px;
+  }
+  body .site-header.topbar {
+    height: 64px;
+    padding: 0 20px;
+  }
+
+  body .site-header .brand img {
+    width: 112px;
+  }
+
+  body .site-header .header-tools {
+    gap: 16px;
+  }
+}

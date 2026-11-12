@@ -71,15 +71,37 @@ def _open_now(
     return False, False
 
 
-def _matching_menus(menus: list[Menu], target_name: str) -> list[Menu]:
-    """공백 차이를 제거하고 선택 메뉴가 실제 메뉴명에 포함되는지 확인한다."""
+def _matching_menus(
+    menus: list[Menu], target_name: str, aliases: list[str] | None = None
+) -> list[Menu]:
+    """대표 메뉴명과 돈가스/돈까스 같은 별칭으로 실제 메뉴를 찾는다."""
 
-    target = normalize_menu_name(target_name).replace(" ", "")
+    targets = {
+        normalize_menu_name(value).replace(" ", "")
+        for value in [target_name, *(aliases or [])]
+        if value
+    }
     return [
         menu
         for menu in menus
-        if target and target in menu.normalized_name.replace(" ", "")
+        if any(target in menu.normalized_name.replace(" ", "") for target in targets)
     ]
+
+
+def current_open_status(
+    rows: list[BusinessHours], *, now: datetime | None = None
+) -> tuple[str, bool]:
+    """저장된 영업 구간을 현재 한국 시간과 비교해 후속 질문용 상태를 만든다.
+
+    반환값의 첫 항목은 ``open``, ``closed``, ``unknown`` 중 하나이고 두 번째
+    항목은 영업 구간에는 포함되지만 휴무 여부가 NULL인지 나타낸다.
+    """
+
+    if not rows:
+        return "unknown", False
+    current = now.astimezone(KOREA_TIMEZONE) if now else datetime.now(KOREA_TIMEZONE)
+    is_open, holiday_unknown = _open_now(rows, current)
+    return ("open" if is_open else "closed"), holiday_unknown
 
 
 def _base_item(raw: Mapping[str, Any], restaurant: Restaurant) -> dict[str, Any]:
@@ -106,6 +128,7 @@ def filter_recommendation_candidates(
     budget: int,
     *,
     now: datetime | None = None,
+    menu_aliases: list[str] | None = None,
 ) -> RecommendationFilterResult:
     """영업 중인 식당을 메뉴·가격 확인 수준에 따라 추천과 후보로 나눈다."""
 
@@ -163,7 +186,9 @@ def filter_recommendation_candidates(
             result.candidate_restaurants.append(item)
             continue
 
-        matched_menus = _matching_menus(restaurant.menus, menu_name)
+        matched_menus = _matching_menus(
+            restaurant.menus, menu_name, aliases=menu_aliases
+        )
         if not matched_menus:
             result.exclude("menu_not_found")
             continue

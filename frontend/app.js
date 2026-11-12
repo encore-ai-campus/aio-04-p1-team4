@@ -1,361 +1,957 @@
-/* 위치와 식당 후보는 실제 카카오 검색을 사용합니다. 질문 해석은 Groq를 사용하며 메뉴 분류·인증은 데모입니다. */
-const $ = (s, root = document) => root.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const defaults = () => ({ minutes: 45, budget: 12000, cuisine: '전체', diet: 'any', spicy: true });
-// 위치는 실제 조회 결과만 저장합니다. 반경은 다음 식당 검색 연결을 위한 요청값입니다.
-const locationSearch = { kind: 'place', query: '', items: [], error: '', busy: false, token: 0, controller: null, timer: null };
-// 위치 반경은 음식 조건과 별도로 관리하며 기본값은 500m입니다.
-const state = { conditions: defaults(), radiusM: 500, location: null, user: null, prefs: {}, result: null, selected: null, cardPage: 0, mapPage: 0, busy: false, spinning: false, version: 0, messages: [], chatTurn: 0, gamePlayed: false };
-let toastTimer, spinTimer, spinFinish;
-try { state.prefs = JSON.parse(localStorage.getItem('lr-demo-preferences') || '{}'); } catch { state.prefs = {}; }
-// Each browser session starts as a guest. Demo membership is not authentication.
-function toast(message) { $('#toast').textContent = message; $('#toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.remove('show'), 3500); }
-function route() { return location.hash.slice(1) || 'home'; }
-function cancelSpin() { clearInterval(spinTimer); clearTimeout(spinFinish); state.spinning = false; }
-function invalidate() { state.version++; state.result = null; state.selected = null; state.cardPage = 0; state.mapPage = 0; state.gamePlayed = false; cancelSpin(); }
-function go(page) { if (route() === page) render(); else location.hash = page; }
-async function api(path, body) {
-  const response = await fetch(`/api/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(path === 'chat' ? 45000 : 30000) });
-  // 인증·권한·한도 오류를 구분하는 서버의 안전한 안내를 표시하며 실패를 빈 결과로 숨기지 않습니다.
-  if (!response.ok) {
-    const data=await response.json().catch(()=>({}));
-    throw new Error(typeof data.detail==='string'?data.detail:response.status===422?'입력 범위를 확인해 주세요.':'요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.');
-  }
-  return response.json();
-}
-// 추천/게임/채팅이 모두 같은 좌표·반경을 전송합니다. 설정 전에는 요청하지 않습니다.
-function payload(menu = false) {
-  if (!state.location || !LunchRunLocation.validCoordinates(state.location.lat, state.location.lng)) throw new Error('먼저 기준 위치를 설정해 주세요.');
-  return { conditions: { ...state.conditions }, menu_id: menu ? state.result?.menu?.id || null : null,
-    location: { ...state.location }, radius_m: state.radiusM };
-}
-function money(value) { return Number(value).toLocaleString('ko-KR') + '원'; }
-function button(label, action, cls = 'button secondary', more = '') { return `<button class="${cls}" data-action="${action}" ${more}>${label}</button>`; }
-function header() {
-  $('#account').innerHTML = state.user ? `<span class="greeting"><b>${esc(state.user.name)}</b>님 반갑습니다</span>${button('회원페이지', 'profile', 'button small secondary')}${button('로그아웃', 'logout', 'text-button')}` : `<span class="guest-badge">GUEST</span>${button('로그인 ↗', 'login', 'button small dark')}`;
-  document.querySelectorAll('.site-header nav a').forEach(a => a.classList.toggle('active', a.hash === '#' + route()));
-}
-function locationBox() {
-  // 자동 조회의 오차를 숨기지 않고 주소와 함께 표시합니다. 정확한 주소 변환은 실패할 수 있습니다.
-  const accuracy = state.location?.source === 'geolocation' && state.location.accuracy != null ? ` · 정확도 약 ${Math.ceil(state.location.accuracy)}m` : '';
-  return `<div class="location-bar"><span class="location-icon">⌖</span><div><small>점심의 출발점</small><strong>${esc(state.location?.name || '위치를 먼저 골라주세요')}</strong><span>${esc((state.location?.address || '현재 위치 또는 주소·장소 검색으로 시작해요') + accuracy)}</span></div>${button(state.location ? '재설정' : '위치 설정', 'location', 'button small secondary')}</div>`;
-}
-// 홈의 독립 입력과 조건 수정 창에서 동일한 반경 입력 규칙을 사용합니다.
-function radiusField() {
-  return `<label>위치 반경<span class="input-unit"><input name="radius_m" type="number" min="50" max="500" step="1" required value="${state.radiusM}" aria-label="위치 반경 미터"><span>m</span></span></label><small>선택 위치 기준 직선거리 · 50~500m · 1m 단위</small>`;
-}
-function radiusForm() {
-  // 홈 화면의 기존 반경 적용 방식은 유지합니다.
-  return `<form class="radius-form">${radiusField().replace('</label>', '</label><button class="button small secondary" type="submit">반경 적용</button>')}</form>`;
-}
-function applyRadius(form) {
-  if (!form.reportValidity()) return false;
-  const radius = Number(new FormData(form).get('radius_m'));
-  if (!Number.isInteger(radius) || radius < 50 || radius > 500) return false;
-  // 기존 검색 응답과 추첨을 무효화하여 이전 반경의 목록·마커를 재사용하지 않습니다.
-  if (radius !== state.radiusM) { state.radiusM=radius; invalidate(); }
-  return true;
-}
-function summaries() {
-  const c = state.conditions, diet = { any: '채식 상관없음', vegetarian: '달걀·유제품 가능', vegan: '완전 채식' };
-  return `<div class="context-stack">${locationBox()}<div class="condition-bar"><span class="context-label">나의 점심 조건</span><div class="chips"><span>반경 ${state.radiusM}m</span><span>${c.minutes}분</span><span>${money(c.budget)} 이하</span><span>${esc(c.cuisine)}</span><span>${diet[c.diet]}</span><span>${c.spicy ? '매운 음식 OK' : '매운 음식 제외'}</span></div>${button('조건 수정', 'conditions', 'text-button')}</div></div>`;
-}
-function conditionsForm(compact = false) {
-  const c = state.conditions;
-  return `<form id="conditions-form" class="conditions-form ${compact ? 'compact' : ''}">
-    <!-- 조건 수정 창에서만 반경을 음식 조건과 함께 저장하며 홈 배치는 유지합니다. -->
-    ${compact ? `<div class="radius-fields">${radiusField()}</div>` : ''}
-    <div class="field-row"><label>남은 점심시간<span class="input-unit"><input name="minutes" type="number" min="10" max="120" step="1" required value="${c.minutes}"><span>분</span></span></label><label>내 예산<span class="input-unit"><input name="budget" type="number" min="1000" max="100000" step="500" required value="${c.budget}"><span>원</span></span></label></div>
-    <fieldset><legend>오늘 끌리는 음식 종류</legend><div class="cuisine-options">${['전체','한식','중식','일식','양식','샐러드'].map((v,i) => `<label class="choice"><input type="radio" name="cuisine" value="${v}" ${c.cuisine === v ? 'checked' : ''}><span>${['✳','🍚','🥟','🍱','🍝','🥗'][i]} ${v}</span></label>`).join('')}</div></fieldset>
-    <label>채식 여부<select name="diet"><option value="any" ${c.diet === 'any' ? 'selected' : ''}>상관없음</option><option value="vegetarian" ${c.diet === 'vegetarian' ? 'selected' : ''}>달걀 및 유제품 가능</option><option value="vegan" ${c.diet === 'vegan' ? 'selected' : ''}>완전 채식</option></select></label>
-    <label class="check-row"><span><b>매운 음식도 괜찮아요</b><small>해제하면 매운 메뉴를 제외해요</small></span><input type="checkbox" name="spicy" ${c.spicy ? 'checked' : ''}></label>
-    <button type="button" class="add-condition" disabled>＋ 음식 조건 추가 <small>COMING SOON</small></button>
-    <button type="submit" class="button primary full">${compact ? '변경한 조건 적용' : '조건 선택 완료'} <span>↗</span></button>
-    <button type="button" data-action="reset" class="text-button reset">↻ 조건 초기화</button>
-  </form>`;
-}
-function home() {
-  return `<section class="home-grid"><div class="hero"><div class="eyebrow"><span></span> A LITTLE LESS THINKING. A BETTER LUNCH.</div><h1>점심시간은 짧게,<br>고민은 <em>더 짧게.</em></h1><p class="hero-copy">오늘 뭐 먹지? 이제 그만.<br>당신의 시간과 취향에 맞춰 한 끼를 골라보세요.</p>
-    <div class="plate-scene" aria-hidden="true"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><div class="food-note">오늘의 점심을 향해 <span>↗</span></div><div class="plate"><div class="plate-inner"><span class="food-bowl">🍱</span></div></div><span class="scene-star">✳</span><span class="scene-tag">GOOD FOOD,<br>GOOD AFTERNOON.</span></div>
-    <div class="steps"><span><b>01</b> 위치 정하기</span><i>→</i><span><b>02</b> 조건 고르기</span><i>→</i><span><b>03</b> 점심 출발!</span></div></div>
-    <div class="setup-panel"><div class="panel-title"><div><span class="eyebrow">YOUR LUNCH, YOUR RULES</span><h2>오늘의 점심 조건</h2></div><span class="tiny-label">STEP 01</span></div>${locationBox()}${radiusForm()}${conditionsForm()}</div></section>`;
-}
-function pageHeading(kicker, title, text) { return `<div class="page-heading"><span class="eyebrow">${kicker}</span><h1>${title}</h1><p>${text}</p></div>`; }
-function pager(page, size, count, action) {
-  const pages = Math.ceil(count / size);
-  if (pages < 2) return '';
-  return `<div class="pager">${button('← 이전', action, 'button small secondary', `data-page="${page-1}" ${page===0?'disabled':''}`)}<span>${page+1} / ${pages}</span>${button('다음 →', action, 'button small secondary', `data-page="${page+1}" ${page===pages-1?'disabled':''}`)}</div>`;
-}
-function prefsFor(id) { return state.prefs[state.user?.name]?.[id]?.value; }
-function preferenceButtons(item) {
-  if (!state.user) return '';
-  const pref = prefsFor(item.id);
-  // 외부에서 받은 식당 ID도 속성에 넣기 전에 이스케이프합니다.
-  return `<div class="preference-buttons">${button('♡','preference',`icon-button ${pref==='like'?'liked':''}`,`data-id="${esc(item.id)}" data-value="like" aria-label="${esc(item.name)} 선호" aria-pressed="${pref==='like'}"`)}${button('⊘','preference',`icon-button ${pref==='dislike'?'disliked':''}`,`data-id="${esc(item.id)}" data-value="dislike" aria-label="${esc(item.name)} 비선호" aria-pressed="${pref==='dislike'}"`)}</div>`;
-}
-function restaurantCard(item, sidebar = false) {
-  // 6단계 DB 검증값만 가격으로 표시하며 NULL을 0원으로 바꾸지 않습니다.
-  const price=typeof item.price==='number'&&Number.isFinite(item.price)?money(item.price):item.price_status==='variable'?'시가/변동':'확인 불가';
-  const distance=typeof item.distance_m==='number'&&Number.isFinite(item.distance_m)?`${Math.round(item.distance_m).toLocaleString('ko-KR')}m`:'데이터 없음';
-  const menu=item.menu_verified?`메뉴: ${esc(item.menu_name||item.search_keyword||'확인됨')}`:'메뉴 확인 불가';
-  const warnings=Array.isArray(item.warnings)&&item.warnings.length?` · ${esc(item.warnings.join(' · '))}`:'';
-  // 추천과 확인 필요 후보가 같은 카드 구조를 사용하되 확인 상태를 문장으로 구분합니다.
-  return `<article class="restaurant-card ${sidebar?'list-card':''} ${state.selected===item.id?'selected':''}">${preferenceButtons(item)}<button class="card-image" data-action="select-restaurant" data-id="${esc(item.id)}" aria-label="${esc(item.name)} 선택"><span>⌑</span><small>No image</small></button><div class="card-content"><span class="card-category">${esc(item.category||'분류 데이터 없음')}</span><button class="card-name" data-action="select-restaurant" data-id="${esc(item.id)}">${sidebar?`${(state.result?.restaurants||[]).slice(state.mapPage*5,state.mapPage*5+5).findIndex(p=>p.id===item.id)+1}. `:''}${esc(item.name)}</button><span class="menu-line">${menu} · 현재 영업 중</span><span class="card-address">${esc(item.address||'주소 데이터 없음')}</span><div class="card-price">${price} <span>메뉴 가격</span></div><div class="card-meta"><span>☆ 평점 데이터 없음</span><span>직선거리 ${distance}</span></div><small class="estimate-note">이동시간·채식·맵기 미확인${warnings}</small></div></article>`;
-}
-function resultCards() {
-  const items=state.result?.restaurants||[], candidates=state.result?.candidate_restaurants||[];
-  if (!items.length&&!candidates.length) return '';
-  // 조건이 확인된 추천과 메뉴·가격 확인이 필요한 후보를 섞지 않고 별도 영역에 표시합니다.
-  const recommended=items.length?`<section class="result-section"><div class="section-heading"><div><span class="eyebrow">VERIFIED LUNCH SPOTS</span><h2>${esc(state.result.menu.name)} 추천 식당 <small>${items.length}</small></h2></div><span class="muted">현재 영업 중</span></div><div class="restaurant-grid">${items.slice(state.cardPage*4,state.cardPage*4+4).map(i=>restaurantCard(i)).join('')}</div>${pager(state.cardPage,4,items.length,'cards-page')}</section>`:'';
-  const needsCheck=candidates.length?`<section class="result-section"><div class="section-heading"><div><span class="eyebrow">NEEDS CHECK</span><h2>확인이 필요한 후보 <small>${candidates.length}</small></h2></div><span class="muted">상세페이지 참고</span></div><div class="restaurant-grid">${candidates.map(i=>restaurantCard(i)).join('')}</div></section>`:'';
-  return `<p class="candidate-notice">${esc(state.result.message)}${state.result.has_more?' 현재 첫 검색 페이지 일부만 확인했습니다.':''}</p>${recommended}${needsCheck}`;
-}
-function chatMessages() {
-  // 질문 해석은 예시 방식이지만 식당 목록은 실제 카카오 검색으로 조회합니다.
-  if (!state.messages.length) return `<div class="chat-welcome"><span class="chat-symbol">✳</span><h3>오늘의 점심 메이트</h3><p>질문을 AI로 해석하고 조건에 맞는 예시 메뉴와 주변 식당 후보를 찾아요.<br>실제 매장의 음식 조건은 미확인입니다.</p></div>`;
-  return state.messages.map((m,i) => `<div class="message ${m.role}"><span class="message-avatar">${m.role==='user'?'나':'✳'}</span><div><p>${esc(m.text)}</p>${m.patch ? `<p class="patch-summary">${esc(patchSummary(m.patch))}</p>` : ''}${m.patch ? button('조건 변경 적용','apply-patch','button small secondary',`data-message="${i}" ${m.version!==state.version||m.turn!==state.chatTurn||state.busy?'disabled':''}`):''}${m.map && m.version===state.version ? `<div class="message-actions">${button('Yes · 지도 보기','map','button small primary')}${button('No · 계속 고르기','decline-map','button small secondary',`data-message="${i}"`)}</div>`:''}</div></div>`).join('');
-}
-function recommendPage() {
-  return `${pageHeading('MAKE YOUR LUNCH', '오늘은 어떻게 골라볼까요?', '운에 맡겨도 좋고, 점심 메이트에게 물어봐도 좋아요.')}${summaries()}<div class="recommend-layout"><section class="game-invite"><span class="eyebrow">LET LUCK PICK</span><div class="dice-art" aria-hidden="true">⚄</div><h2>고민 대신,<br>운 좋은 한 끼.</h2><p>조건에 맞는 메뉴 중 하나를<br>랜덤으로 골라드릴게요.</p>${button('메뉴 뽑으러 가기 ↗','game','button dark full')}<small>외부 게임 없이 동작하는 데모 추첨</small></section><section class="chat-panel"><div class="chat-header"><div><span class="status-dot"></span><b>점심 메이트</b></div><span id="ai-connection-summary" class="tiny-label ai-connection-summary" data-status="checking" data-busy="${state.busy}">${state.busy?'AI 응답 생성 중…':'AI 연결 확인 중'}</span></div><div id="groq-connection" class="groq-connection" data-status="checking" role="status" aria-live="polite"><div><b class="groq-status-label">Groq 연결 확인 중</b><p class="groq-status-detail">연결 상태를 확인합니다.</p><small class="groq-status-time">아직 확인된 시각이 없습니다.</small></div><button class="button small secondary" data-action="check-groq">연결 다시 확인</button></div><div class="chat-body" id="chat-body" role="log" aria-live="polite">${chatMessages()}</div><div class="quick-prompts">${['지금 조건으로 추천해줘','가까운 식당 보여줘','메뉴 설명해줘'].map(q=>button(esc(q),'prompt','prompt-button',`data-text="${q}" ${state.busy?'disabled':''}`)).join('')}</div><form id="chat-form" class="chat-input"><label class="sr-only" for="chat-message">점심 질문</label><input id="chat-message" name="message" maxlength="500" placeholder="오늘 점심은 어떤 게 좋을까요?" required ${state.busy?'disabled':''}><button class="send-button" aria-label="메시지 보내기" ${state.busy?'disabled':''}>${state.busy?'…':'↑'}</button></form></section></div>${resultCards()}`;
-}
-function gamePage() {
-  const menu = state.result?.menu;
-  // 카탈로그 예상 가격을 실제 식당 가격처럼 표시하지 않고 메뉴 분류와 검색 상태를 구분합니다.
-  return `${pageHeading('A LUCKY LITTLE LUNCH', '오늘의 한 끼를 뽑아보세요.', '예시 메뉴를 고른 뒤 주변 관련 식당을 검색합니다.')}${summaries()}<section class="game-stage"><span class="tiny-label">LUNCH LOTTERY</span><div class="lottery-icon ${state.busy?'rolling':''}">${menu?menu.emoji:'🎲'}</div><h2>${state.busy?'메뉴를 고르고 식당을 검색하는 중…':menu?esc(menu.name):'오늘은 뭐가 나올까요?'}</h2><p>${esc(state.result?.message||'메뉴의 예시 분류·예상 가격으로 후보를 고릅니다. 실제 매장 조건은 미확인입니다.')}</p><div class="game-actions">${menu?button('식당 후보 보기 →','map','button dark',state.busy?'disabled':''):''}${button(menu?'한번 더! ↻':'랜덤 메뉴 뽑기 ↗','draw-menu','button primary',state.busy?'disabled':'')}</div><small>식당 가격·채식·맵기·총소요시간은 검증하지 않았습니다.</small></section>`;
-}
-function mapGraphic(items) {
-  // 실제 지도와 로딩·실패 안내를 분리하여 마커를 가리지 않게 합니다.
-  return `<section id="map-panel" class="live-map-shell" aria-label="선택 위치 주변 지도"><div class="kakao-map-canvas" aria-label="카카오 지도"></div><div class="map-status" role="status" aria-live="polite"><p>지도를 불러오는 중입니다…</p><button class="button secondary" data-action="retry-map" hidden>지도 다시 불러오기</button></div></section>`;
-}
-function mapPage() {
-  const items = state.result?.restaurants || [];
-  // 지도에는 메뉴·예산·현재 영업 여부가 확인된 추천 식당만 표시합니다.
-  return `${pageHeading('FIND YOUR LUNCH SPOT', '추천 식당을 지도에서 살펴보세요.', '현재 영업 중이며 메뉴와 예산이 확인된 식당만 번호 마커로 표시합니다.')}${summaries()}<p class="candidate-notice">메뉴·가격·현재 영업 여부 확인 완료 · 채식·맵기·총소요시간 미확인${state.result?.has_more?' · 첫 검색 페이지 일부만 확인':''}</p><div class="map-layout"><aside class="restaurant-sidebar"><div class="sidebar-title"><h2>${state.result?.menu?esc(state.result.menu.name):'추천 식당'} <small>${items.length}</small></h2><span>DB 검증 결과</span></div>${button(state.spinning?'두근두근… 5초 추첨 중':state.gamePlayed?'한번 더! ↻':'식당 랜덤 선택 ⚄','draw-restaurant','button primary full',`${!items.length||state.spinning?'disabled':''}`)}<div class="sidebar-items">${items.length?items.slice(state.mapPage*5,state.mapPage*5+5).map(i=>restaurantCard(i,true)).join(''):`<div class="empty"><span>⌑</span><h3>현재 추천 가능한 식당이 없어요</h3><p>${esc(state.result?.message || '게임이나 점심 메이트에서 메뉴를 먼저 골라주세요.')}</p>${button('메뉴 고르러 가기','recommend','button small secondary')}</div>`}</div>${pager(state.mapPage,5,items.length,'map-page')}</aside>${mapGraphic(items)}</div>`;
-}
-function profilePage() {
-  if (!state.user) return `<section class="empty page-empty"><h1>회원 전용 공간이에요</h1><p>실제 계정 없이 데모 회원 기능을 체험해 보세요.</p>${button('데모 로그인','login','button primary')}</section>`;
-  const values = Object.values(state.prefs[state.user.name] || {});
-  // 이전 데모 저장값과 실제 식당 저장값을 구분하며 누락 가격을 0원으로 표시하지 않습니다.
-  const list = pref => values.filter(v=>v.value===pref).map(v=>`<div class="saved-item"><div><b>${esc(v.item.name)}</b><span>${esc(v.item.address||v.item.menu_name||'주소 데이터 없음')} · ${typeof v.item.price==='number'?money(v.item.price):'가격 데이터 없음'} · ${v.item.source==='kakao'?'카카오 검색 후보':'이전 데모 데이터'}</span></div>${button('해제','remove-preference','text-button',`data-id="${esc(v.item.id)}"`)}</div>`).join('') || '<div class="empty compact-empty">아직 저장한 식당이 없어요.</div>';
-  return `${pageHeading('MY LUNCH NOTE', `${esc(state.user.name)}님의 점심 노트`, '좋았던 곳도, 취향과 달랐던 곳도 기억해 둘게요.')}<div class="profile-info"><div class="profile-avatar">${esc(state.user.name.slice(0,1))}</div><div><h2>${esc(state.user.name)}</h2><p>demo@lunchrun.example · 데모 회원</p></div><span class="tiny-label">이 브라우저에만 저장</span></div><div class="profile-columns"><section class="panel"><h2>♡ 선호 식당</h2>${list('like')}</section><section class="panel"><h2>⊘ 비선호 식당</h2>${list('dislike')}</section></div>`;
-}
-// 현재 목록의 최대 5개 식당과 선택 상태를 지도에 전달합니다.
-function mountRestaurantMap(retry = false) {
-  const items = (state.result?.restaurants || []).slice(state.mapPage*5,state.mapPage*5+5);
-  window.LunchRunMap?.mount($('#map-panel'), state.location, retry, {
-    items, radiusM:state.radiusM, selected:state.selected, spinning:state.spinning,
-    onSelect:id=>{
-      // 마커 선택도 카드 선택과 같은 상태를 사용하므로 양쪽 강조가 일치합니다.
-      if (state.spinning) return;
-      state.selected=id; render();
-      $('.restaurant-sidebar .restaurant-card.selected')?.scrollIntoView({block:'nearest',behavior:'smooth'});
-    },
-  });
-}
-function render() {
-  let page = route();
-  if (!['home','recommend','game','map','profile'].includes(page)) { location.hash='home'; return; }
-  if (['recommend','game','map'].includes(page) && !state.location) { location.hash='home'; toast('먼저 기준 위치를 선택해 주세요.'); return; }
-  // 같은 지도 화면의 재렌더에서는 DOM과 지도 객체를 보존합니다.
-  const previousMap = page === 'map' ? $('#map-panel') : null;
-  if (page !== 'map') window.LunchRunMap?.unmount();
-  header();
-  $('#app').innerHTML = ({home, recommend:recommendPage, game:gamePage, map:mapPage, profile:profilePage})[page]();
-  // 추첨·목록 변경으로 지도를 재생성하지 않고 위치 변경만 반영합니다.
-  if (page === 'map') {
-    if (previousMap) $('#map-panel').replaceWith(previousMap);
-    mountRestaurantMap();
-  }
-  // 추천 화면 진입 시에만 확인하며 재렌더에는 모듈의 최근 결과를 재사용합니다.
-  if(page==='recommend')window.LunchRunGroqStatus?.check();
-  const body = $('#chat-body'); if(body) body.scrollTop=body.scrollHeight;
-}
-// 다른 창을 열거나 위치 창을 닫으면 진행 중 검색과 늦은 Geolocation 응답을 무효화합니다.
-function cancelLocationRequest() {
-  locationSearch.token++; locationSearch.controller?.abort(); clearTimeout(locationSearch.timer); locationSearch.busy=false;
-}
-function openModal(content) { cancelLocationRequest(); const modal=$('#modal'); modal.innerHTML=`<button data-action="close-modal" class="modal-close" aria-label="닫기">×</button>${content}`; if(!modal.open) modal.showModal(); }
-function chooseLocation() {
-  // 홈에서 작성 중인 유효한 조건은 위치 설정 후 다시 그려져도 유지합니다.
-  const draft=$('#conditions-form');
-  if(draft && draft.checkValidity()) {
-    const d=new FormData(draft);const next={minutes:Number(d.get('minutes')),budget:Number(d.get('budget')),cuisine:d.get('cuisine'),diet:d.get('diet'),spicy:d.has('spicy')};
-    // 작성 중 조건이 달라졌다면 위치 선택을 취소하더라도 이전 추천을 재사용하지 않습니다.
-    if(JSON.stringify(next)!==JSON.stringify(state.conditions)){state.conditions=next;invalidate();}
-  }
-  locationSearch.query='';locationSearch.items=[];locationSearch.error='';
-  openModal(`<span class="eyebrow">WHERE TO START</span><h2>점심의 출발점</h2><p class="muted">현재 위치 조회 시 권한이 필요합니다. 주소 표시를 위해 좌표를 카카오에 전달하며, 앱은 위치를 영구 저장하지 않습니다.</p>${button('⌖ 현재 위치 가져오기','current-location','button primary full')}<div class="location-tabs" role="group" aria-label="위치 검색 종류">${button('장소명 검색','location-kind','button small secondary',`data-kind="place" aria-pressed="${locationSearch.kind==='place'}"`)}${button('주소 검색','location-kind','button small secondary',`data-kind="address" aria-pressed="${locationSearch.kind==='address'}"`)}</div><form id="location-search-form"><label for="location-search">주소 또는 장소 검색</label><div class="location-search-row"><input id="location-search" name="query" maxlength="100" placeholder="예: 가산디지털단지역" required autocomplete="off"><button class="button dark small" type="submit">검색</button></div></form><p id="location-status" class="location-status" role="status" aria-live="polite">검색 후 결과를 선택해 주세요. 좌표의 주소 변환에 실패해도 위치는 사용할 수 있습니다.</p><div id="location-options"></div>`);
-}
-// 검색값은 HTML에 넣기 전에 이스케이프하여 외부 장소명이 마크업으로 실행되지 않게 합니다.
-function showLocationResults(items) {
-  $('#location-options').innerHTML=items.map((item,i)=>`<button class="location-option" data-action="pick-location" data-index="${i}"><span>⌖</span><div><b>${esc(item.name)}</b><small>${esc(item.address)}</small></div><span>→</span></button>`).join('');
-}
-function locationStatus(text) { const node=$('#location-status'); if(node)node.textContent=text; }
-function updateLocationBusy(busy) {
-  locationSearch.busy=busy;
-  const button=$('[data-action="current-location"]');if(button){button.disabled=busy;button.textContent=busy?'위치 확인 중…':'⌖ 현재 위치 가져오기';}
-  const submit=$('#location-search-form button');if(submit)submit.disabled=busy;
-}
-// 성공한 위치 선택만 기존 추천을 초기화합니다. 조회 실패 시 기존 위치는 유지됩니다.
-function selectLocation(item) {
-  if(!item||!LunchRunLocation.validCoordinates(item.lat,item.lng)){locationStatus('올바른 위치가 아닙니다. 다시 검색해 주세요.');return;}
-  cancelLocationRequest();state.location={...item};invalidate();$('#modal').close();render();toast('기준 위치를 설정했어요.');
-}
-async function searchLocation(query) {
-  cancelLocationRequest();const token=locationSearch.token;locationSearch.controller=new AbortController();
-  locationSearch.query=query;locationSearch.items=[];showLocationResults([]);updateLocationBusy(true);locationStatus('검색 중…');
+import { configure, request, demoRestaurants } from "./api.js";
+const $ = (s) => document.querySelector(s),
+  state = {
+    budget: 5000,
+    remaining_minutes: 50,
+    distance_m: 500,
+    people: 1,
+    category: "전체",
+    origin: null,
+    end_time: new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Seoul",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date(Date.now() + 60 * 60 * 1000)),
+    participant_menus: [],
+    game: null,
+    menu: null,
+    restaurants: [],
+    selected: null,
+    route: null,
+    context: "",
+  };
+const settingsKey = "lunchrun-page-settings";
+const reloaded =
+  performance.getEntriesByType("navigation")[0]?.type === "reload";
+try {
+  if (reloaded) sessionStorage.removeItem(settingsKey);
+  else
+    Object.assign(
+      state,
+      JSON.parse(sessionStorage.getItem(settingsKey) || "{}"),
+    );
+} catch {}
+function saveSettings() {
   try {
-    const data=await LunchRunLocation.search(query,locationSearch.kind,locationSearch.controller.signal);
-    if(token!==locationSearch.token||!$('#modal').open)return;
-    locationSearch.items=data.items;showLocationResults(data.items);
-    locationStatus(data.items.length?`검색 결과 ${data.items.length}개${data.has_more?' · 상위 10개입니다. 검색어를 구체적으로 입력하면 더 정확히 찾을 수 있어요.':''}`:'검색 결과가 없습니다. 주소/장소 검색 종류나 검색어를 바꿔 주세요.');
-  } catch(error) {if(token===locationSearch.token)locationStatus(error.name==='TimeoutError'?'검색 시간이 초과되었습니다. 다시 시도해 주세요.':error.message);}
-  finally {if(token===locationSearch.token)updateLocationBusy(false);}
+    sessionStorage.setItem(settingsKey, JSON.stringify(state));
+  } catch {}
 }
-async function getCurrentLocation() {
-  if(locationSearch.busy)return;cancelLocationRequest();const token=locationSearch.token;
-  locationSearch.controller=new AbortController();updateLocationBusy(true);showLocationResults([]);locationStatus('브라우저 위치 권한을 확인해 주세요.');
-  // 권한 대기까지 포함해 30초 후 UI를 복구합니다. 취소 이후의 브라우저 응답은 무시합니다.
-  locationSearch.timer=setTimeout(()=>{if(token===locationSearch.token){cancelLocationRequest();updateLocationBusy(false);locationStatus('위치 확인이 지연되고 있습니다. 다시 시도하거나 검색으로 선택해 주세요.');}},30000);
+window.addEventListener("pagehide", saveSettings);
+state.chat ||= [];
+function consumeGameHandoff() {
   try {
-    const item=await LunchRunLocation.current();if(token!==locationSearch.token)return;
-    locationStatus('좌표를 확인했습니다. 주소를 확인하는 중…');
-    // 주소 변환 장애는 위치 확보 실패가 아닙니다. 확보한 좌표를 대체 표시합니다.
-    try {const result=await LunchRunLocation.reverse(item,locationSearch.controller.signal);if(result.address)item.address=result.address;} catch { /* 좌표 문자열을 유지합니다. */ }
-    if(token===locationSearch.token&&$('#modal').open)selectLocation(item);
-  } catch(error) {if(token===locationSearch.token)locationStatus(error.message);}
-  finally {if(token===locationSearch.token){clearTimeout(locationSearch.timer);updateLocationBusy(false);}}
+    const handoff = JSON.parse(
+      sessionStorage.getItem("lunchrun-game-handoff") || "null",
+    );
+    if (!handoff || typeof handoff.menu !== "string" || !handoff.menu.trim())
+      return;
+    state.menu = handoff.menu.trim();
+    if (Number.isFinite(handoff.budget)) state.budget = handoff.budget;
+    if (Number.isFinite(handoff.time)) {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Seoul",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date());
+      const get = (type) =>
+        Number(parts.find((part) => part.type === type).value);
+      const total = (get("hour") * 60 + get("minute") + handoff.time) % 1440;
+      const endHour = String(Math.floor(total / 60)).padStart(2, "0");
+      const endMinute = String(total % 60).padStart(2, "0");
+      state.end_time = `${endHour}:${endMinute}`;
+    }
+    if (Number.isFinite(handoff.distance)) state.distance_m = handoff.distance;
+    if (Number.isFinite(handoff.people)) state.people = handoff.people;
+    if (typeof handoff.category === "string") state.category = handoff.category;
+    if (
+      Array.isArray(handoff.origin) &&
+      handoff.origin.length === 2 &&
+      handoff.origin.every(Number.isFinite)
+    ) {
+      state.origin = {
+        latitude: handoff.origin[0],
+        longitude: handoff.origin[1],
+      };
+    }
+    sessionStorage.removeItem("lunchrun-game-handoff");
+  } catch {}
 }
-function authModal(signup=false) {
-  openModal(`<span class="eyebrow">WELCOME TO LUNCH RUN</span><h2>${signup?'회원가입 화면 체험':'가볍게, 데모 로그인'}</h2><p class="muted">실제 계정은 생성하지 않아요. 닉네임으로 회원 화면을 체험합니다.</p><div class="auth-tabs">${button('로그인','login',signup?'text-button':'text-button active')}${button('회원가입','signup',signup?'text-button active':'text-button')}</div><form id="auth-form"><label>이메일<input type="email" value="demo@lunchrun.example" disabled></label><label>닉네임<input name="nickname" maxlength="20" placeholder="예: 점심러너" required autocomplete="off"></label><label>비밀번호<input type="password" placeholder="인증 연결 전에는 입력하지 않아요" disabled></label><button class="button primary full">${signup?'데모 회원으로 시작':'데모 로그인'} ↗</button></form><div class="auth-links">${button('아이디 찾기','unavailable','text-button')}${button('비밀번호 찾기','unavailable','text-button')}</div>`);
+consumeGameHandoff();
+let demo = true,
+  busy = false;
+const escape = (s) =>
+  String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+const button = (label, action, cls = "") =>
+  `<button class="${cls}" data-action="${action}">${label}</button>`;
+function payload() {
+  return {
+    budget: Number(state.budget),
+    remaining_minutes: remainingLunch(),
+    lunch_end_time: state.end_time,
+    distance_m: Number(state.distance_m),
+    people: Number(state.people),
+    origin: state.origin,
+    menu: state.menu,
+    game: state.game,
+    context: state.context,
+    time: new Date().toISOString(),
+    participant_menus: state.participant_menus,
+    category: state.people > 1 ? "전체" : state.category,
+    restaurants: undefined,
+    selected: undefined,
+    route: undefined,
+  };
 }
-async function drawMenu() {
-  if(state.busy) return;
-  // 새 메뉴 검색은 이전 추첨과 변경안을 무효화해 오래된 식당이 다시 선택되지 않게 합니다.
-  invalidate();
-  // 재검색이 실패해도 이전 식당을 새 결과처럼 보여주지 않도록 시작 시 목록을 비웁니다.
-  const version=state.version;state.result=null;state.selected=null;state.gamePlayed=false;state.busy=true;render();
-  try { const result=await api('recommendations',payload()); if(version!==state.version) return; state.result=result; state.selected=null; state.cardPage=0; state.mapPage=0; if(!result.menu) toast(result.message); }
-  catch(e){if(version===state.version){state.result={menu:null,restaurants:[],message:e.message};toast(e.message);}} finally {state.busy=false;render();}
+function invalidate() {
+  state.menu = null;
+  state.restaurants = [];
+  state.selected = null;
+  state.route = null;
 }
-// 변경안을 실제 값으로 표시하며 사용자 확인 전에는 상태를 바꾸지 않습니다.
-function patchSummary(patch) {
-  const names={minutes:'점심시간',budget:'예산',cuisine:'음식 종류',diet:'채식',spicy:'매운 음식',radius_m:'반경'};
-  const diets={any:'상관없음',vegetarian:'달걀·유제품 가능',vegan:'완전 채식'};
-  return Object.entries(patch).map(([k,v])=>`${names[k]||k}: ${k==='diet'?diets[v]:k==='spicy'?(v?'가능':'제외'):v}${k==='radius_m'?'m':k==='minutes'?'분':k==='budget'?'원':''}`).join(' · ');
-}
-function applyChatPatch(index) {
-  const m=state.messages[index];
-  // 다른 질문·위치·조건 변경 이후의 제안이나 중복 적용은 실행하지 않습니다.
-  if(state.busy||!m?.patch||m.version!==state.version||m.turn!==state.chatTurn)return false;
-  const patch=m.patch, {radius_m,...food}=patch;
-  const allowed=['minutes','budget','cuisine','diet','spicy','radius_m'];
-  if(Object.keys(patch).some(k=>!allowed.includes(k)))return false;
-  if(radius_m!==undefined&&(!Number.isInteger(radius_m)||radius_m<50||radius_m>500))return false;
-  state.conditions={...state.conditions,...food};
-  if(radius_m!==undefined)state.radiusM=radius_m;
-  invalidate(); m.patch=null;
-  state.messages.push({role:'assistant',text:'조건을 적용했어요. 새 조건으로 다시 추천해 달라고 해주세요.'});
-  render(); return true;
-}
-async function sendChat(message) {
-  if(state.busy||!message.trim())return;
-  if (/^(yes|네|예|응)$/i.test(message.trim()) && state.result?.menu && state.messages.some(m=>m.map&&m.version===state.version)) { go('map'); return; }
-  // 추첨 도중 다른 화면에서 채팅을 시작해도 기존 타이머가 검색 결과를 덮지 않게 합니다.
-  cancelSpin();
-  const version=state.version, turn=++state.chatTurn;
-  state.messages.push({role:'user',text:message});state.busy=true;render();
-  // Groq 해석 이후 서버가 반환한 실제 검색 결과만 기존 카드·지도에 연결합니다.
-  try {
-    const data=await api('chat',{...payload(true),message});
-    if(version!==state.version)return;
-    if(data.result){cancelSpin();state.result=data.result;state.cardPage=0;state.mapPage=0;state.selected=null;state.gamePlayed=false;}
-    state.messages.push({role:'assistant',text:data.text,patch:data.suggested_patch,version,turn});
-    if(data.result?.restaurants?.length)state.messages.push({role:'assistant',text:'검색된 식당 후보 목록과 주변 지도를 볼까요?',map:true,version});
-  } catch(e){
-    if(version===state.version){state.result=null;state.selected=null;state.messages.push({role:'assistant',text:e.name==='TimeoutError'?'전체 요청 시간이 초과되었습니다. 다시 시도해 주세요.':e.message});}
-  } finally {state.busy=false;render();}
-}
-
-function drawRestaurant() {
-  const items=state.result?.restaurants;if(!items?.length||state.spinning)return;
-  state.spinning=true;const version=state.version;const chosen=items[Math.floor(Math.random()*items.length)];let i=0;
-  const highlight=item=>{state.selected=item.id;state.mapPage=Math.floor(items.findIndex(x=>x.id===item.id)/5);render();};
-  spinTimer=setInterval(()=>highlight(items[(i++)%items.length]),180);render();
-  spinFinish=setTimeout(()=>{clearInterval(spinTimer);state.spinning=false;if(version!==state.version)return;state.gamePlayed=true;highlight(chosen);toast(`${chosen.name} 선택 완료!`);},5000);
-}
-document.addEventListener('submit',async event=>{
-  event.preventDefault();const form=event.target;const data=new FormData(form);
-  // 반경은 별도 위치 조건이며 적용 후에는 새로 식당을 검색해야 합니다.
-  if(form.classList.contains('radius-form')) {
-    if(applyRadius(form)){render();if($('#modal').open)$('#modal').close();toast('반경을 적용했어요. 식당을 다시 검색해 주세요.');}
+function go(r, gameSource = null) {
+  saveSettings();
+  if (r === "backend-games") {
+    if (remainingLunch() < 10) {
+      showTimeRequiredDialog();
+      return;
+    }
+    try {
+      sessionStorage.setItem(
+        "lunchrun-games-settings",
+        JSON.stringify({
+          budget: Number(state.budget),
+          time: remainingLunch(),
+          distance: Number(state.distance_m),
+          people: Number(state.people),
+          categories: state.category === "전체" ? [] : [state.category],
+          origin: state.origin,
+        }),
+      );
+    } catch {
+      $("#status").textContent =
+        "게임에 조건을 전달하지 못했습니다. 브라우저 저장소 사용을 확인해주세요.";
+      return;
+    }
+    location.assign("/games/");
     return;
   }
-  if(form.id==='conditions-form'){
-    // 수정 창에서는 같은 폼의 반경을, 홈에서는 기존 독립 반경 폼을 검증합니다.
-    if(!form.reportValidity())return;
-    const radiusDraft=data.has('radius_m') ? form : $('.radius-form');
-    if(radiusDraft && !applyRadius(radiusDraft))return;
-    state.conditions={minutes:Number(data.get('minutes')),budget:Number(data.get('budget')),cuisine:data.get('cuisine'),diet:data.get('diet'),spicy:data.has('spicy')};invalidate();
-    if($('#modal').open){$('#modal').close();render();toast('조건을 변경했어요. 이전 추천은 초기화했습니다.');}
-    else if(!state.location){render();chooseLocation();toast('조건을 저장했어요. 기준 위치를 골라주세요.');}
-    else go('recommend');
+  if (r === "restaurants" && !state.menu) {
+    $("#status").textContent = "게임에서 메뉴를 먼저 결정해주세요.";
+    return;
   }
-  if(form.id==='auth-form'){state.user={name:String(data.get('nickname')).trim()||'점심러너'};$('#modal').close();render();toast('데모 회원 모드입니다. 실제 인증은 연결하지 않았어요.');}
-  if(form.id==='chat-form')await sendChat(String(data.get('message')).trim());
-  // Enter/검색 버튼으로만 카카오 검색을 실행하여 입력 중 불필요한 API 요청을 줄입니다.
-  if(form.id==='location-search-form'){
-    const query=String(data.get('query')).trim();
-    if(!query){locationStatus('주소 또는 장소를 입력해 주세요.');return;}
-    await searchLocation(query);
+  if (r === "route" && (!state.menu || !state.selected || !state.route)) {
+    $("#status").textContent = !state.menu
+      ? "메뉴를 먼저 결정해주세요."
+      : "식당 선택 화면에서 식당을 선택한 뒤 경로를 확인해주세요.";
+    return;
   }
+  if (["games", "group-input", "play"].includes(r) && state.people > 12) {
+    $("#status").textContent =
+      "12명 초과시 게임추천 서비스는 사용 할 수 없습니다.";
+    return;
+  }
+  history.pushState(null, "", "#" + r);
+  render();
+  window.scrollTo(0, 0);
+}
+
+function showTimeRequiredDialog() {
+  if (document.querySelector(".time-required-dialog")) return;
+  const dialog = document.createElement("dialog");
+  dialog.className = "location-dialog time-required-dialog";
+  dialog.setAttribute("aria-labelledby", "time-required-title");
+  dialog.innerHTML = `
+    <form method="dialog" class="location-dialog-form">
+      <h2 id="time-required-title">점심 종료시간을 설정 해주세요.</h2>
+      <p>남은 시간이 10분 미만 입니다.</p>
+      <button type="submit" class="location-apply">확인</button>
+    </form>
+  `;
+  document.body.appendChild(dialog);
+  dialog.querySelector("form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    dialog.close();
+    go("time");
+  });
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.addEventListener("close", () => dialog.remove(), { once: true });
+  dialog.showModal();
+}
+
+async function run(fn) {
+  if (busy) return;
+  busy = true;
+  $("#status").textContent = "처리 중…";
+  try {
+    await fn();
+    $("#status").textContent = "";
+  } catch (e) {
+    $("#status").textContent =
+      e.name === "AbortError"
+        ? "요청 시간이 초과되었습니다. 다시 시도해주세요."
+        : e.message;
+  } finally {
+    busy = false;
+  }
+}
+
+// Keep the main app's navigation identical to the standalone game shell.
+function renderNavigation(route, stage) {
+  const items = [
+    { label: "조건 설정", target: "conditions", active: stage === 0 },
+    { label: "AI 추천", target: "ai", active: route === "ai" },
+    {
+      label: "게임 선택",
+      target: "backend-games",
+      active: stage === 1 && route !== "ai",
+    },
+    { label: "식당 선택", target: "restaurants", active: stage === 2 },
+    { label: "경로 확인", target: "route", active: stage === 3 },
+  ];
+  $("#dock").innerHTML = items
+    .map((item) =>
+      button(item.label, "go:" + item.target, item.active ? "active" : ""),
+    )
+    .join("");
+}
+
+function render() {
+  saveSettings();
+  const r = location.hash.slice(1) || "conditions";
+  const app = document.querySelector(".app"),
+    previous = app.dataset.view;
+  app.dataset.view = r;
+  const enterDock =
+    previous === undefined ||
+    (previous !== r && (r === "conditions" || r === "games"));
+  if (enterDock) {
+    const dock = $("#dock");
+    dock.classList.remove("dock-enter");
+    void dock.offsetWidth;
+    dock.classList.add("dock-enter");
+  }
+  let stage = [
+    "conditions",
+    "budget",
+    "time",
+    "end-time",
+    "people",
+    "distance",
+  ].includes(r)
+    ? 0
+    : r === "restaurants"
+      ? 2
+      : r === "route"
+        ? 3
+        : 1;
+  renderNavigation(r, stage);
+  $("#summary").textContent = stage
+    ? `${state.budget.toLocaleString()}원 / ${remainingLunch()}분 남음 / ${state.distance_m}m / ${state.people}명${state.people === 1 ? " / " + state.category : ""}`
+    : "";
+  let title = "오늘 점심, 어떻게 고를까요?",
+    html = "";
+  if (r === "conditions") {
+    html =
+      '<div class="grid">' +
+      [
+        ["예산설정", "budget", state.budget.toLocaleString() + "원"],
+        ["남은시간", "time", remainingLunch() + "분"],
+        ["거리설정", "distance", state.distance_m + "m"],
+        ["인원 수 설정", "people", state.people + "명"],
+      ]
+        .map(
+          ([l, p, v]) =>
+            `<div class="field">${l}${button(v, "go:" + p, "card")}</div>`,
+        )
+        .join("") +
+      '</div><p class="category-label">음식 카테고리</p><div class="chips">' +
+      ["전체", "한식", "일식", "중식", "양식", "샐러드"]
+        .map(
+          (c) =>
+            `<button data-category="${c}" ${state.people > 1 ? "disabled" : ""} class="${c === state.category ? "active" : ""}">${c}</button>`,
+        )
+        .join("") +
+      '</div><p class="notice">다인 이용 시 음식 카테고리 선택이 비활성화됩니다.</p><div class="actions">' +
+      (state.people > 12
+        ? '<button class="primary" disabled>게임으로 메뉴 고르기</button>'
+        : button("게임으로 메뉴 고르기", "go:backend-games", "primary")) +
+      button("AI에게 추천받기", "go:ai") +
+      "</div>";
+  } else if (r === "budget") {
+    html =
+      '<div class="setting"><p>예산설정</p><div class="value">' +
+      button("−", "money:-1000") +
+      '<label class="money-field"><input id="budget-input" aria-label="예산 금액" inputmode="numeric" type="text" value="' +
+      state.budget.toLocaleString("ko-KR") +
+      '" autocomplete="off"><span>원</span></label>' +
+      button("+", "money:1000") +
+      '</div></div><div class="actions">' +
+      button("적용", "apply-budget", "primary") +
+      "</div>";
+  } else if (r === "time" || r === "end-time") {
+    const [hour, minute] = state.end_time.split(":").map(Number);
+    html =
+      '<div class="setting"><p>점심 종료 시간</p><div class="value time-value">' +
+      button("−", "clock:-10") +
+      '<div class="time-fields"><select id="period" aria-label="오전 오후"><option value="AM" ' +
+      (hour < 12 ? "selected" : "") +
+      '>AM</option><option value="PM" ' +
+      (hour >= 12 ? "selected" : "") +
+      '>PM</option></select><label><input id="end-hour" aria-label="종료 시" type="number" min="1" max="12" value="' +
+      (hour % 12 || 12) +
+      '"><span>시</span></label><label><input id="end-minute" aria-label="종료 분" type="number" min="0" max="59" value="' +
+      String(minute).padStart(2, "0") +
+      '"><span>분</span></label></div>' +
+      button("+", "clock:10") +
+      '</div><p class="input-hint">− / + 버튼으로 10분씩 조정합니다.</p></div><div class="actions">' +
+      button("적용", "apply-time", "primary") +
+      "</div>";
+  } else if (r === "people") {
+    html =
+      '<div class="setting"><p>인원 수 설정</p><div class="value">' +
+      button("−", "people-step:-1") +
+      '<label class="people-field"><input id="people-input" aria-label="인원 수" aria-describedby="people-warning" type="number" min="1" step="1" value="' +
+      state.people +
+      '"><span>명</span></label>' +
+      button("+", "people-step:1") +
+      '</div><p id="people-warning" class="people-warning" role="status" ' +
+      (state.people > 12 ? "" : "hidden") +
+      '>12명 초과시 게임추천 서비스는 사용 할 수 없습니다.</p></div><div class="actions">' +
+      button("적용", "apply-people", "primary") +
+      "</div>";
+  } else if (r === "distance") {
+    html =
+      '<div class="setting"><p>거리설정</p><div class="value">' +
+      button("−", "adjust:distance_m:-100") +
+      "<strong>" +
+      state.distance_m +
+      "m</strong>" +
+      button("+", "adjust:distance_m:100") +
+      '</div><input aria-label="거리설정" type="range" data-key="distance_m" min="0" max="1000" step="100" value="' +
+      state.distance_m +
+      '"><div class="ends"><span>0m</span><span>1000m</span></div></div><div class="actions">' +
+      button("적용", "go:conditions", "primary") +
+      "</div>";
+  } else if (r === "games") {
+    title =
+      state.people === 1 ? "혼자서 가볍게 골라요" : "함께 먹을 메뉴를 골라요";
+    html =
+      '<div class="grid">' +
+      (state.people === 1
+        ? ["제비뽑기", "가챠", "행운권 뽑기", "랜덤게임"]
+        : ["룰렛", "사다리"]
+      )
+        .map(
+          (g) =>
+            '<button class="card game-card" data-game="' +
+            g +
+            '" ' +
+            (g === "사다리" && state.people > 8 ? "disabled" : "") +
+            "><strong>" +
+            g +
+            "</strong><small>" +
+            (g === "랜덤게임"
+              ? "혼자 게임 중 하나를 자동 선택"
+              : "선택 후 게임 진행") +
+            "</small></button>",
+        )
+        .join("") +
+      '</div><div class="actions">' +
+      button("조건 변경", "go:conditions") +
+      button("AI 추천", "go:ai") +
+      "</div>";
+  } else if (r === "group-input") {
+    title = "각자의 메뉴를 입력해주세요";
+    html =
+      Array.from(
+        { length: state.people },
+        (_, i) =>
+          `<label class="field">사용자 ${i + 1}<input data-participant="${i}" maxlength="50" value="${escape(state.participant_menus[i] || "")}" placeholder="메뉴 입력"></label>`,
+      ).join("") + button("메뉴 결정", "prepare-group", "primary");
+  } else if (r === "play") {
+    title = "점심 메뉴를 뽑고 있어요";
+    html =
+      `<div class="card result">${escape(state.game)}</div>` +
+      button("메뉴 뽑기", "draw", "primary");
+  } else if (r === "ai") {
+    title = "지금 나에게 맞는 메뉴";
+    const nickname = window.LunchRunProfile.readName() || "게스트";
+    html =
+      `<div class="ai-chat" role="log" aria-label="AI와 대화" aria-live="polite">${state.chat.length ? state.chat.map((message) => `<div class="chat-row ${message.role}"><div class="chat-bubble">${message.role === "user" ? escape(message.name || nickname) : "✦ AI"} : ${escape(message.text)}</div><time class="chat-time">${message.time ? escape(new Date(message.time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })) : ""}</time></div>`).join("") : '<p class="chat-welcome">✦ AI : 안녕하세요. 오늘 먹고 싶은 음식이나 컨디션을 알려주세요.</p>'}</div>
+      <div class="ai-compose"><textarea id="context" aria-label="AI에게 메시지 입력" maxlength="1000" placeholder="날씨·기온·컨디션을 알려주세요">${escape(state.context)}</textarea><button type="button" data-action="chat" hidden></button></div>` +
+      button("메뉴 추천받기", "recommend", "primary");
+  } else if (r === "result") {
+    title = "오늘의 점심 메뉴";
+    html = `<div class="card result">${escape(state.menu || "아직 결정된 메뉴가 없습니다.")}</div><p>식당은 다음 단계에서 선택합니다.</p><div class="actions">${button("한번더", state.game ? "draw" : "recommend")}${button("OK · 식당 탐색", "find", "primary")}</div>`;
+  } else if (r === "restaurants") {
+    if (demo && !state.restaurants.length) {
+      state.menu ||= "김치찌개";
+      state.restaurants = demoRestaurants.map((restaurant) => ({
+        ...restaurant,
+        menu: state.menu,
+      }));
+    }
+    title = "이 메뉴를 먹을 수 있는 곳";
+    html =
+      '<div class="restaurant-layout"><div class="restaurant-list">' +
+      state.restaurants
+        .map(
+          (x) =>
+            '<button class="card restaurant-card ' +
+            (state.selected?.id === x.id ? "selected" : "") +
+            '" data-restaurant="' +
+            escape(x.id) +
+            '"><strong>' +
+            escape(x.name) +
+            "</strong>" +
+            escape(x.menu) +
+            " " +
+            escape(x.price) +
+            "원<span>" +
+            escape(x.distance_m) +
+            "m · " +
+            (x.walk_minutes === null
+              ? "도보 시간 미확인"
+              : "도보 " + escape(x.walk_minutes) + "분") +
+            "</span></button>",
+        )
+        .join("") +
+      '</div><figure class="map-preview"><img src="assets/restaurants.png" alt="예시 식당 지도"></figure></div><div class="actions">' +
+      button("식당 랜덤", "random") +
+      button("OK · 경로 확인", "route", "primary") +
+      "</div>";
+    if (!state.restaurants.length)
+      html =
+        "<p>후보가 없습니다. 조건을 변경해주세요.</p>" +
+        button("식당 검색", "find");
+  } else if (r === "route") {
+    title = "선택한 식당으로 출발";
+    html = state.route
+      ? '<div class="map"><div class="card route-summary"><strong>총소요예상 ' +
+        escape(state.route.walk_minutes) +
+        "분　│　총거리 " +
+        escape(state.route.distance_m) +
+        "m</strong><p>현재 위치 → " +
+        escape(state.selected?.name) +
+        ' / 편도 도보 예상 · 예시</p></div><img src="assets/route.png" alt="도보 경로 예시"><button class="route-back" data-action="go:restaurants">다른 식당 선택</button></div><p class="route-note">대기·식사·왕복 시간 포함 여부는 미확정입니다.</p>'
+      : "<p>식당을 먼저 선택해주세요.</p>" +
+        button("식당 선택", "go:restaurants");
+  } else {
+    html = button("조건 설정으로", "go:conditions");
+  }
+  $("#title").textContent = title;
+  $("#screen").innerHTML = html;
+  window.LunchRunMotion?.enter(document.querySelector(".app main"), r);
+  fitBudgetWidth();
+  const expanded = document.querySelector(".setting .value");
+  if (expanded) expanded.style.viewTransitionName = "condition-expand";
+  const icons = {
+    전체: "M3 17h26M5 16a11 11 0 0 1 22 0M14 3h4M16 3v3",
+    한식: "M4 14h24c0 8-5 13-12 13S4 22 4 14M8 10l2-4m6 4V5m6 5 2-4",
+    일식: "M4 20c0-9 24-13 24-3v6H4ZM10 15l3 7m4-10 3 9",
+    중식: "M4 16h24c0 8-5 12-12 12S4 24 4 16M9 11c-5-5 5-5 0-10m7 10c-5-5 5-5 0-10m7 10c-5-5 5-5 0-10",
+    양식: "M8 3v12m-4-12v8c0 5 8 5 8 0V3M8 15v14M24 3c-8 5-8 13 0 13V3v26",
+    샐러드:
+      "M4 17h24c-1 7-5 11-12 11S5 24 4 17M16 16C4 16 6 3 10 6c4 2 6 6 6 10Zm0 0c0-12 9-13 10-10-1 5-4 8-10 10Z",
+  };
+  document
+    .querySelectorAll("[data-category]")
+    .forEach((b) =>
+      b.insertAdjacentHTML(
+        "afterbegin",
+        '<svg class="food-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="' +
+          icons[b.dataset.category] +
+          '"/></svg>',
+      ),
+    );
+
+  const img = (name, alt) =>
+    '<img class="visual-asset" src="assets/' +
+    name +
+    '.png" alt="' +
+    alt +
+    '">';
+  if (r === "play") {
+    document.querySelector(".result").style.viewTransitionName = "game-expand";
+    const names = {
+      제비뽑기: "draw",
+      가챠: "gacha",
+      "행운권 뽑기": "ticket",
+      랜덤게임: "random",
+      룰렛: "roulette",
+      사다리: "ladder",
+    };
+    $("#screen .result").innerHTML = img(
+      names[state.game] || "gacha",
+      state.game || "게임 예시",
+    );
+    $("#screen .result").insertAdjacentHTML(
+      "afterend",
+      '<p class="play-note">설정 조건 안에서 음식 메뉴만 추첨합니다.</p>',
+    );
+  }
+  if (r === "games") {
+    const names = {
+      제비뽑기: "draw",
+      가챠: "gacha",
+      "행운권 뽑기": "ticket",
+      랜덤게임: "random",
+      룰렛: "roulette",
+      사다리: "ladder",
+    };
+    document
+      .querySelectorAll("[data-game]")
+      .forEach((b) =>
+        b.insertAdjacentHTML(
+          "beforeend",
+          img("option-" + names[b.dataset.game], b.dataset.game + " 예시"),
+        ),
+      );
+  }
+  if (r === "result") {
+    const result = $("#screen .result");
+    result.className = "card menu-result";
+    result.innerHTML =
+      img("result", "선택 메뉴 예시") +
+      "<div><small>선택된 음식 메뉴</small><strong>" +
+      escape(state.menu || "아직 미결정") +
+      "</strong><p>식당은 다음 단계에서 선택합니다.</p></div>";
+    result.nextElementSibling.remove();
+  }
+  if (false)
+    $("#screen").insertAdjacentHTML(
+      "afterbegin",
+      '<figure class="map-preview">' +
+        img("restaurants", "식당 위치 예시 지도") +
+        "</figure>",
+    );
+  if (false)
+    $("#screen .map").innerHTML =
+      img("route", "선택 식당까지 도보 경로 예시") +
+      "<p>예시 경로 · 실제 길찾기 연동 전</p>";
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.category) {
+    state.category = b.dataset.category;
+    invalidate();
+    render();
+  }
+  if (b.dataset.game) {
+    state.game = b.dataset.game;
+    state.participant_menus = [];
+    go(
+      state.people > 1 ? "group-input" : "play",
+      state.people === 1 ? b : null,
+    );
+  }
+  if (b.dataset.restaurant) {
+    state.selected = state.restaurants.find(
+      (x) => x.id === b.dataset.restaurant,
+    );
+    render();
+    $("#status").textContent = state.selected.name + " 선택됨";
+  }
+  const a = b.dataset.action;
+  if (!a) return;
+  if (a.startsWith("money:")) {
+    commitBudget();
+    state.budget = Math.max(
+      1000,
+      Math.min(100000000, state.budget + Number(a.split(":")[1])),
+    );
+    invalidate();
+    render();
+    return;
+  }
+  if (a === "apply-people") {
+    if (commitPeople()) go("conditions");
+    return;
+  }
+  if (a.startsWith("people-step:")) {
+    if (!commitPeople()) return;
+    state.people = Math.max(1, state.people + Number(a.split(":")[1]));
+    invalidate();
+    render();
+    return;
+  }
+  if (a === "apply-budget") {
+    commitBudget();
+    go("conditions");
+    return;
+  }
+  if (a.startsWith("clock:")) {
+    if (!commitTime()) return;
+    const [h, m] = state.end_time.split(":").map(Number);
+    const total = (h * 60 + m + Number(a.split(":")[1]) + 1440) % 1440;
+    state.end_time =
+      String(Math.floor(total / 60)).padStart(2, "0") +
+      ":" +
+      String(total % 60).padStart(2, "0");
+    invalidate();
+    render();
+    return;
+  }
+  if (a === "apply-time") {
+    if (commitTime()) {
+      invalidate();
+      go("conditions");
+    }
+    return;
+  }
+  if (a.startsWith("go:")) return go(a.slice(3));
+  if (a.startsWith("adjust:")) {
+    const [, k, v] = a.split(":");
+    const ranges = {
+      budget: [1000, 100000000],
+      remaining_minutes: [1, 180],
+      people: [1, Infinity],
+      distance_m: [0, 1000],
+    };
+    state[k] = Math.max(
+      ranges[k][0],
+      Math.min(ranges[k][1], state[k] + Number(v)),
+    );
+    if (state.people > 1) state.category = "전체";
+    invalidate();
+    render();
+    return;
+  }
+  if (a === "prepare-group") {
+    if (
+      Array.from({ length: state.people }, (_, i) =>
+        state.participant_menus[i]?.trim(),
+      ).some((v) => !v)
+    ) {
+      $("#status").textContent = "참가자별 메뉴를 모두 입력해주세요.";
+      return;
+    }
+    go("play");
+    return;
+  }
+  run(async () => {
+    if (a === "draw" || a === "recommend" || a === "chat") {
+      if ((a === "recommend" || a === "chat") && $("#context"))
+        state.context = $("#context").value;
+      if (!demo && !state.origin) throw Error("위치 설정을 먼저 해주세요.");
+      const result = demo
+        ? { menu: "김치찌개" }
+        : await request("/api/menu-decisions", {
+            ...payload(),
+            method: a === "draw" ? "game" : "ai",
+          });
+      if (!result.menu) throw Error("메뉴 응답 형식을 확인해주세요.");
+      state.menu = result.menu;
+      state.restaurants = [];
+      state.selected = null;
+      state.route = null;
+      if (a !== "draw") {
+        if (state.context.trim())
+          state.chat.push({
+            role: "user",
+            name: window.LunchRunProfile.readName() || "게스트",
+            text: state.context,
+            time: new Date().toISOString(),
+          });
+        state.chat.push({
+          role: "ai",
+          text: `${state.menu} 메뉴를 추천해요.`,
+          time: new Date().toISOString(),
+        });
+        state.context = "";
+        saveSettings();
+        if (a === "chat") {
+          render();
+          return;
+        }
+        sessionStorage.setItem(
+          "lunchrun-ai-result",
+          JSON.stringify({ name: state.menu }),
+        );
+        sessionStorage.setItem(
+          "lunchrun-games-settings",
+          JSON.stringify({
+            budget: state.budget,
+            time: remainingLunch(),
+            distance: state.distance_m,
+            people: state.people,
+            categories: state.category === "전체" ? [] : [state.category],
+            origin: state.origin,
+          }),
+        );
+        location.assign("/games/#play");
+        return;
+      }
+      go("result");
+    }
+    if (a === "find") {
+      if (!state.menu) throw Error("메뉴를 먼저 결정해주세요.");
+      const result = demo
+        ? { restaurants: demoRestaurants }
+        : await request("/api/restaurants/search", payload());
+      if (!Array.isArray(result.restaurants))
+        throw Error("식당 응답 형식 오류");
+      state.restaurants = result.restaurants;
+      state.selected = null;
+      go("restaurants");
+    }
+    if (a === "random") {
+      if (!state.restaurants.length) throw Error("후보가 없습니다.");
+      state.selected =
+        state.restaurants[Math.floor(Math.random() * state.restaurants.length)];
+      render();
+      $("#status").textContent = state.selected.name + " 선택됨";
+    }
+    if (a === "route") {
+      if (!state.selected) throw Error("식당을 선택해주세요.");
+      state.route = demo
+        ? {
+            distance_m: state.selected.distance_m,
+            walk_minutes: state.selected.walk_minutes ?? 9,
+          }
+        : await request("/api/routes", {
+            origin: state.origin,
+            restaurant_id: state.selected.id,
+          });
+      go("route");
+    }
+  });
 });
-// 검색어 수정 시 이전 결과와 진행 중 요청을 무효화해 다른 검색어의 위치 선택을 막습니다.
-document.addEventListener('input',event=>{if(event.target.id==='location-search'){cancelLocationRequest();locationSearch.items=[];showLocationResults([]);updateLocationBusy(false);locationStatus('검색 후 결과를 선택해 주세요.');}});
-// ESC로 닫은 경우에도 진행 중 위치 조회 결과가 나중에 적용되지 않게 처리합니다.
-$('#modal').addEventListener('close',cancelLocationRequest);
-document.addEventListener('click',async event=>{
-  const el=event.target.closest('[data-action]');if(!el||el.disabled)return;const action=el.dataset.action;
-  if(['home','recommend','game','map','profile'].includes(action)){go(action);return;}
-  if(action==='location')chooseLocation();
-  // 고정 예시 대신 브라우저 현재 위치 또는 카카오 검색 결과만 선택합니다.
-  if(action==='current-location')await getCurrentLocation();
-  if(action==='pick-location')selectLocation(locationSearch.items[Number(el.dataset.index)]);
-  if(action==='location-kind'){
-    cancelLocationRequest();locationSearch.kind=el.dataset.kind;locationSearch.items=[];
-    showLocationResults([]);updateLocationBusy(false);
-    document.querySelectorAll('[data-action="location-kind"]').forEach(node=>node.setAttribute('aria-pressed',String(node.dataset.kind===locationSearch.kind)));
-    $('#location-search').placeholder=locationSearch.kind==='address'?'예: 서울 금천구 가산디지털1로 25':'예: 가산디지털단지역';
-    locationStatus('검색 종류를 변경했습니다. 검색 버튼을 눌러 주세요.');
+document.addEventListener("input", (e) => {
+  if (e.target.dataset.key) {
+    state[e.target.dataset.key] = Number(e.target.value);
+    if (state.people > 1) state.category = "전체";
+    invalidate();
+    const val = $("#screen .value strong");
+    if (val) {
+      const k = e.target.dataset.key;
+      val.textContent =
+        k === "budget"
+          ? state[k].toLocaleString() + "원"
+          : state[k] +
+            ({ people: "명", distance_m: "m", remaining_minutes: "분" }[k] ||
+              "");
+    }
   }
-  if(action==='close-modal'){cancelLocationRequest();$('#modal').close();}
-  if(action==='conditions')openModal(`<span class="eyebrow">YOUR LUNCH RULES</span><h2>음식 조건 수정</h2>${conditionsForm(true)}`);
-  if(action==='reset'){state.conditions=defaults();invalidate();if($('#modal').open)openModal(`<h2>음식 조건 수정</h2>${conditionsForm(true)}`);else render();toast('음식 조건을 초기화했어요. 위치는 유지됩니다.');}
-  if(action==='login'||action==='signup')authModal(action==='signup');
-  if(action==='logout'){state.user=null;render();toast('게스트 모드로 전환했어요.');}
-  if(action==='unavailable')toast('이 기능은 인증 서비스 연결 후 사용할 수 있어요.');
-  if(action==='draw-menu')await drawMenu();
-  // 연결 확인 버튼은 채팅·조건·입력 내용을 초기화하지 않습니다.
-  if(action==='check-groq')window.LunchRunGroqStatus?.check(true);
-  if(action==='prompt')await sendChat(el.dataset.text);
-  if(action==='decline-map'){state.messages[Number(el.dataset.message)].map=false;render();}
-  if(action==='apply-patch')applyChatPatch(Number(el.dataset.message));
-  if(action==='cards-page'){state.cardPage=Number(el.dataset.page);render();}
-  // 실패 안내의 재시도는 선택 위치와 식당 목록을 유지합니다.
-  if(action==='retry-map') mountRestaurantMap(true);
-  if(action==='map-page'){if(state.spinning)return;state.mapPage=Number(el.dataset.page);render();}
-  if(action==='select-restaurant'){
-    // 선택은 실제 식당 ID로 동기화합니다. 임의 지도 배치를 안내하지 않습니다.
-    if(state.spinning)return;state.selected=el.dataset.id;const items=state.result?.restaurants||[];const index=items.findIndex(x=>x.id===state.selected);if(index<0)return;state.mapPage=Math.floor(index/5);render();if(route()!=='map')toast('식당을 선택했어요. 목록 화면에서 확인할 수 있습니다.');
-  }
-  if(action==='draw-restaurant')drawRestaurant();
-  if(action==='preference'){
-    if(!state.user)return;const item=state.result?.restaurants.find(x=>x.id===el.dataset.id);if(!item)return;
-    const key=state.user.name;state.prefs[key] ||= {};const old=state.prefs[key][item.id];
-    if(old?.value===el.dataset.value)delete state.prefs[key][item.id];else state.prefs[key][item.id]={value:el.dataset.value,item};
-    try{localStorage.setItem('lr-demo-preferences',JSON.stringify(state.prefs));}catch{toast('브라우저 저장 공간이 부족해 임시로만 보관합니다.');}render();
-  }
-  if(action==='remove-preference'&&state.user){delete state.prefs[state.user.name][el.dataset.id];try{localStorage.setItem('lr-demo-preferences',JSON.stringify(state.prefs));}catch{}render();}
+  if (e.target.dataset.participant !== undefined)
+    state.participant_menus[Number(e.target.dataset.participant)] =
+      e.target.value;
 });
-window.addEventListener('hashchange',()=>{cancelSpin();render();window.scrollTo({top:0,behavior:'instant'});});
+let selectedLocation = window.LunchRunLocation.read();
+if (selectedLocation) {
+  state.origin = {
+    latitude: selectedLocation.latitude,
+    longitude: selectedLocation.longitude,
+  };
+}
+$("#location").onclick = () => {
+  window.LunchRunLocation.open({
+    current: selectedLocation,
+    onChange(value) {
+      selectedLocation = value;
+      state.origin = { latitude: value.latitude, longitude: value.longitude };
+      invalidate();
+      render();
+      $("#status").textContent = value.name + " 위치가 설정되었습니다.";
+    },
+  });
+};
+window.addEventListener("hashchange", render);
 render();
+configure()
+  .then((v) => {
+    demo = v;
+    $("#mode").textContent = demo ? "" : "백엔드 연결 모드";
+    render();
+  })
+  .catch((e) => {
+    $("#mode").textContent = "설정 확인 전 · 시안 미리보기";
+    $("#status").textContent = e.message;
+  });
+
+$("#account").onclick = () => {
+  window.LunchRunProfile.open({
+    onChange(name) {
+      $("#status").textContent = name
+        ? `${name}님, 오늘도 맛있는 점심 되세요!`
+        : "게스트 모드로 전환했어요. 취향은 이 브라우저에 유지돼요.";
+    },
+  });
+};
+
+function fitCanvas() {
+  document.documentElement.style.setProperty(
+    "--scale",
+    Math.min(1, window.innerWidth / 1516, window.innerHeight / 1038),
+  );
+}
+window.addEventListener("resize", fitCanvas);
+fitCanvas();
+
+function remainingLunch() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Seoul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const get = (t) => Number(parts.find((p) => p.type === t).value);
+  const [h, m] = state.end_time.split(":").map(Number);
+  return Math.max(0, h * 60 + m - get("hour") * 60 - get("minute"));
+}
+function displayEndTime() {
+  const [h, m] = state.end_time.split(":").map(Number);
+  return (
+    (h < 12 ? "AM" : "PM") +
+    " " +
+    String(h % 12 || 12).padStart(2, "0") +
+    ":" +
+    String(m).padStart(2, "0")
+  );
+}
+function commitBudget() {
+  const el = $("#budget-input");
+  if (!el) return;
+  const digits = el.value.replace(/[^0-9]/g, "");
+  state.budget = Math.min(100000000, Math.max(1000, Number(digits) || 1000));
+  el.value = state.budget.toLocaleString("ko-KR");
+  fitBudgetWidth();
+  invalidate();
+}
+function commitTime() {
+  const h = $("#end-hour"),
+    m = $("#end-minute");
+  if (!h || !m) return false;
+  const hh = Number(h.value),
+    mm = Number(m.value);
+  if (
+    h.value === "" ||
+    m.value === "" ||
+    !Number.isInteger(hh) ||
+    !Number.isInteger(mm) ||
+    hh < 1 ||
+    hh > 12 ||
+    mm < 0 ||
+    mm > 59
+  ) {
+    $("#status").textContent =
+      "시는 1~12, 분은 0~59 사이의 정수로 입력해주세요.";
+    return false;
+  }
+  state.end_time =
+    String((hh % 12) + ($("#period").value === "PM" ? 12 : 0)).padStart(
+      2,
+      "0",
+    ) +
+    ":" +
+    String(mm).padStart(2, "0");
+  $("#status").textContent = "";
+  return true;
+}
+document.addEventListener("input", (e) => {
+  if (e.target.id === "budget-input") {
+    const el = e.target,
+      caret = el.selectionStart,
+      leftDigits = el.value.slice(0, caret).replace(/[^0-9]/g, "").length;
+    let raw = el.value.replace(/[^0-9]/g, "");
+    if (Number(raw) > 100000000) raw = "100000000";
+    el.value = raw ? Number(raw).toLocaleString("ko-KR") : "";
+    let seen = 0,
+      pos = 0;
+    while (pos < el.value.length && seen < leftDigits) {
+      if (/[0-9]/.test(el.value[pos])) seen++;
+      pos++;
+    }
+    el.setSelectionRange(pos, pos);
+    fitBudgetWidth();
+  }
+});
+document.addEventListener("focusout", (e) => {
+  if (e.target.id === "budget-input") commitBudget();
+});
+
+function fitBudgetWidth() {
+  const el = document.querySelector("#budget-input");
+  if (!el) return;
+  const context = document.createElement("canvas").getContext("2d");
+  if (!context) return;
+  const style = getComputedStyle(el);
+  context.font =
+    style.fontWeight + " " + style.fontSize + " " + style.fontFamily;
+  el.style.width =
+    Math.ceil(context.measureText(el.value || "0").width + 4) + "px";
+}
+function refreshRemainingTime() {
+  const button = document.querySelector(
+    '.app[data-view="conditions"] [data-action="go:time"]',
+  );
+  if (button) button.textContent = remainingLunch() + "분";
+  const summary = document.querySelector("#summary");
+  if (summary && summary.textContent) {
+    summary.textContent =
+      state.budget.toLocaleString() +
+      "원 / " +
+      remainingLunch() +
+      "분 남음 / " +
+      state.distance_m +
+      "m / " +
+      state.people +
+      "명" +
+      (state.people === 1 ? " / " + state.category : "");
+  }
+}
+setInterval(refreshRemainingTime, 15000);
+window.addEventListener("focus", refreshRemainingTime);
+
+function commitPeople() {
+  const el = $("#people-input");
+  if (!el) return true;
+  const n = Number(el.value);
+  if (!el.value || !Number.isSafeInteger(n) || n < 1) {
+    $("#status").textContent = "인원 수는 1명 이상의 정수로 입력해주세요.";
+    return false;
+  }
+  state.people = n;
+  if (n > 1) state.category = "전체";
+  invalidate();
+  $("#status").textContent = "";
+  return true;
+}
+document.addEventListener("input", (e) => {
+  if (e.target.id !== "people-input") return;
+  const n = Number(e.target.value);
+  $("#people-warning").hidden = !(n > 12);
+  if (Number.isSafeInteger(n) && n >= 1) {
+    state.people = n;
+    if (n > 1) state.category = "전체";
+    invalidate();
+  }
+});
+document.addEventListener("focusout", (e) => {
+  if (e.target.id === "people-input") commitPeople();
+});
+
+// Enter sends a message; Shift+Enter keeps the textarea's native newline.
+document.addEventListener("keydown", (event) => {
+  if (
+    event.target.id !== "context" ||
+    event.key !== "Enter" ||
+    event.shiftKey ||
+    event.isComposing
+  )
+    return;
+  event.preventDefault();
+  if (!busy && event.target.value.trim())
+    document.querySelector('[data-action="chat"]')?.click();
+});

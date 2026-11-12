@@ -1,0 +1,92 @@
+body dialog.location-dialog {
+  width: min(420px, calc(100vw - 32px));
+  max-width: none;
+  max-height: none;
+  padding: 28px;
+  overflow: visible;
+  border: 1px solid #e2e5e9;
+  border-radius: 20px;
+  background: #fff;
+  color: #182133;
+  color-scheme: light;
+  font:
+    14px/1.6 "Noto Sans KR",
+    "Malgun Gothic",
+    sans-serif;
+}
+
+body dialog.location-dialog::backdrop {
+  background: #18213355;
+  backdrop-filter: blur(3px);
+}
+
+.location-dialog .location-dialog-form {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.location-dialog h2 {
+  position: static;
+  margin: 0;
+  padding-right: 30px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.location-dialog p {
+  margin: 0;
+  color: #727b8b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.location-dialog label {
+  display: block;
+  margin: 6px 0 0;
+  font-weight: 600;
+}
+
+.location-dialog select,
+.location-dialog button {
+  box-sizing: border-box;
+  font: inherit;
+  color: #182133;
+  border: 1px solid #e2e5e9;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #f8f9fb;
+}
+
+.location-dialog select {
+  width: 100%;
+  min-width: 0;
+}
+
+.location-dialog .location-dialog-close {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  font-size: 26px;
+}
+
+.location-dialog .location-dialog-hint,
+.location-dialog .location-dialog-status {
+  font-size: 12px;
+}
+
+.location-dialog .location-dialog-status:empty {
+  display: none;
+}
+
+.location-dialog .location-apply {
+  color: #fff;
+  background: #ff681d;
+  border-color: #ff681d;
+  font-weight: 700;
+}

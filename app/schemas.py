@@ -1,4 +1,4 @@
-"""Shared request contracts. All values in this version are demo data."""
+"""위치·추천·채팅 API가 공유하는 검증된 요청 계약."""
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 

@@ -7,7 +7,10 @@ import httpx
 from app.clients.groq import GroqClient, GroqError
 from app.config import Settings
 from app.schemas import Conditions
-from app.services import MENUS
+from app.database.seed import DEFAULT_MENU_CATALOG
+
+
+MENUS = [dict(item) for item in DEFAULT_MENU_CATALOG]
 
 
 def completion(content=None, finish="stop"):
@@ -72,11 +75,33 @@ class GroqClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("private-secret", str(error.exception))
 
     async def test_bad_payload_and_token_truncation(self):
-        for data in [{}, {"choices":[]}, completion("not-json"),
-                     completion(json.dumps({"intent":"explain_menu","menu_id":"unknown"})),
-                     completion(json.dumps({"intent":"recommend_menu","restaurants":[]})),
-                     completion(finish="length"), completion(finish="tool_calls")]:
-            with self.subTest(data=data), self.assertRaises(GroqError) as error:
-                await self.invoke(lambda r: httpx.Response(200, json=data))
-            expected = "groq_truncated" if data.get("choices") and data["choices"][0].get("finish_reason")=="length" else "groq_response"
-            self.assertEqual(error.exception.code, expected)
+        malformed = [
+            {},
+            {"choices":[]},
+            completion("not-json"),
+            completion(json.dumps({"intent":"explain_menu","menu_id":"unknown"})),
+            completion(json.dumps({"intent":"recommend_menu","restaurants":[]})),
+            completion(finish="tool_calls"),
+        ]
+        for data in malformed:
+            calls = []
+            def handler(request):
+                calls.append(request)
+                return httpx.Response(200, json=data)
+            with self.subTest(data=data):
+                result = await self.invoke(handler)
+                # 형식 오류를 두 번 받아도 검색 실행 대신 안전한 확인 의도로 낮춘다.
+                self.assertEqual(result.intent, "clarify")
+                self.assertEqual(result.clarification_kind, "ambiguous")
+                self.assertEqual(len(calls), 2)
+
+        calls = []
+        with self.assertRaises(GroqError) as error:
+            await self.invoke(
+                lambda request: (
+                    calls.append(request)
+                    or httpx.Response(200, json=completion(finish="length"))
+                )
+            )
+        self.assertEqual(error.exception.code, "groq_truncated")
+        self.assertEqual(len(calls), 1)

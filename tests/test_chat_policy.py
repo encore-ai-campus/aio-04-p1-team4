@@ -3,7 +3,11 @@ import json
 import unittest
 from pydantic import ValidationError
 from app.chat_policy import POLICY_DIR, build_interpretation_messages, parse_interpretation, load_replies
-from app.services import MENUS
+from app.database.seed import DEFAULT_MENU_CATALOG
+
+
+# 단위 테스트는 운영 서비스의 고정 배열 대신 DB 초기화 원본으로 허용 ID를 만든다.
+MENUS = [dict(item) for item in DEFAULT_MENU_CATALOG]
 
 
 class ChatPolicyTests(unittest.TestCase):

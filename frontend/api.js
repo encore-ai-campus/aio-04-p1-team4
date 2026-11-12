@@ -1,0 +1,4 @@
+let base='';
+export async function configure(){if(location.protocol==='file:')return true;const r=await fetch('/config.json');if(!r.ok)throw Error('설정 파일을 읽지 못했습니다. Python 서버로 실행해주세요.');base=(await r.json()).apiBase;return !base;}
+export async function request(path,body){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);try{const r=await fetch(base+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:controller.signal});if(!r.ok)throw Error(`서버 요청 실패 (${r.status})`);return await r.json();}finally{clearTimeout(timer);}}
+export const demoRestaurants=[{id:'demo-a',name:'점심식당',menu:'김치찌개',price:9000,distance_m:450,walk_minutes:7},{id:'demo-b',name:'골목식당',menu:'김치찌개',price:10000,distance_m:620,walk_minutes:null}];

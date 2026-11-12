@@ -1,0 +1,227 @@
+{
+  "main": {
+    "id": "1ec6f1ef470b1050",
+    "type": "split",
+    "children": [
+      {
+        "id": "02c90f5bb594e619",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "8fcfedbc77dba8c1",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "BACKEND_DB_GUIDE.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "BACKEND_DB_GUIDE"
+            }
+          },
+          {
+            "id": "7f182f288f572b70",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "README.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "README"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "6b9bd2aa8912b5a7",
+    "type": "split",
+    "children": [
+      {
+        "id": "07295b03101024b8",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "fff5ba390e539c27",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "파일 탐색기"
+            }
+          },
+          {
+            "id": "f7e5f79bcd445fdd",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "검색"
+            }
+          },
+          {
+            "id": "586482f41b5240ba",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "북마크"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "6e0e756e2ac518c8",
+    "type": "split",
+    "children": [
+      {
+        "id": "fcb502e9772eb68d",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "15d61393df110c81",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "BACKEND_DB_GUIDE.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "백링크"
+            }
+          },
+          {
+            "id": "4c9f85b3c79a4fd6",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "BACKEND_DB_GUIDE.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "나가는 링크"
+            }
+          },
+          {
+            "id": "2765f0fed9e3c310",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "태그"
+            }
+          },
+          {
+            "id": "ddd5f1050ba4bb6d",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "모든 속성"
+            }
+          },
+          {
+            "id": "a3afc3da1136540f",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "BACKEND_DB_GUIDE.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "개요"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:빠른 전환기 열기": false,
+      "graph:그래프 뷰 열기": false,
+      "canvas:새 캔버스 만들기": false,
+      "daily-notes:오늘의 일일 노트 열기": false,
+      "templates:템플릿 삽입": false,
+      "command-palette:명령어 팔레트 열기": false,
+      "bases:새 베이스 생성하기": false
+    }
+  },
+  "active": "8fcfedbc77dba8c1",
+  "lastOpenFiles": [
+    "docs_old/README.md",
+    "docs_old/docs/step5_db_chat_verification_v1.md",
+    "docs_old/docs/step4_groq_guardrail_verification_v1.md",
+    "docs_old/docs/step3_chat_session_verification_v1.md",
+    "docs_old/docs/step2_menu_catalog_verification_v1.md",
+    "docs_old/docs/groq_guardrail_design_v1.md",
+    "docs_old/docs/chat_session_design_v1.md",
+    "docs_old/docs/chatbot_policy_v3.md",
+    "docs_old/docs/chatbot_policy_v2.md",
+    "docs_old/docs/chatbot_policy_v1.md",
+    "docs_old/docs",
+    "docs_old/INTEGRATION_QA.md",
+    "docs_old/GUARDRAIL_VALIDATION.md",
+    "docs_old/CHAT_POLICY_GUIDE.md",
+    "docs_old/README_demo.md",
+    "docs_old",
+    "CHATBOT_GUARDRAIL_GUIDE_v1.md",
+    "README.md",
+    "BACKEND_DB_GUIDE.md"
+  ]
+}

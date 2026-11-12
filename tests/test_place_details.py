@@ -1,7 +1,7 @@
 """Kakao detail parsing, persistence, and failure-preservation tests."""
 
 import asyncio
-from datetime import time
+from datetime import datetime, time, timezone
 from pathlib import Path
 
 import pytest
@@ -174,6 +174,16 @@ class CountingCollector:
         return raw_page()
 
 
+class PartialFailureCollector(CountingCollector):
+    """첫 식당만 실패시켜 다음 식당 수집이 계속되는지 확인한다."""
+
+    async def collect(self, kakao_id: str, place_url: str) -> RawPlacePage:
+        self.ids.append(kakao_id)
+        if kakao_id == "123":
+            raise PlaceCollectionError("fetch_failed", "page_timeout")
+        return raw_page()
+
+
 def test_collection_batch_limits_new_restaurants(tmp_path: Path):
     database = make_database(tmp_path)
     collector = CountingCollector()
@@ -201,5 +211,66 @@ def test_collection_batch_limits_new_restaurants(tmp_path: Path):
         )
         assert collector.ids == ["123", "124"]
         assert len(results) == 2
+    finally:
+        database.dispose()
+
+
+def test_collection_batch_reuses_fresh_data_and_reports_cache(tmp_path: Path):
+    database = make_database(tmp_path)
+    events = []
+
+    async def scenario():
+        # 첫 수집 성공 직후 같은 식당은 브라우저를 다시 열지 않고 저장값을 사용한다.
+        await collect_restaurant_details(database, "123", FakeCollector())
+
+        async def progress(event):
+            events.append(event)
+
+        return await collect_restaurant_details_batch(
+            database,
+            ["123"],
+            checked_at=datetime.now(timezone.utc),
+            collector=CountingCollector(),
+            progress=progress,
+        )
+
+    try:
+        assert asyncio.run(scenario()) == []
+        assert events == [
+            {
+                "event": "using_cache",
+                "message": "저장된 식당 정보 1곳을 재사용하고 있어요.",
+                "cached": 1,
+                "total": 1,
+            }
+        ]
+    finally:
+        database.dispose()
+
+
+def test_collection_batch_continues_after_one_restaurant_fails(tmp_path: Path):
+    database = make_database(tmp_path)
+    collector = PartialFailureCollector()
+    try:
+        with database.session_factory.begin() as session:
+            session.add(
+                Restaurant(
+                    id="124",
+                    name="두 번째 식당",
+                    latitude=37.48,
+                    longitude=126.88,
+                    address="서울 테스트로 2",
+                    place_url="https://place.map.kakao.com/124",
+                    detail_status=PlaceDetailStatus(),
+                )
+            )
+        results = asyncio.run(
+            collect_restaurant_details_batch(
+                database, ["123", "124"], collector=collector
+            )
+        )
+        assert collector.ids == ["123", "124"]
+        assert results[0]["menu_status"] == "fetch_failed"
+        assert results[1]["menu_status"] == "success"
     finally:
         database.dispose()

@@ -1,0 +1,154 @@
+/* Match the original game's guest dialog on every page. */
+body dialog.profile-dialog {
+  box-sizing: border-box;
+  width: min(520px, calc(100vw - 36px));
+  max-width: 520px;
+  max-height: calc(100dvh - 32px);
+  padding: 32px;
+  overflow-y: auto;
+  background: #fff;
+  color: #17243b;
+  color-scheme: light;
+  border: 1px solid #dae3ef;
+  border-radius: 16px;
+  box-shadow: 0 24px 90px #14243b30;
+  font:
+    12px/1.6 "Noto Sans KR",
+    "Malgun Gothic",
+    sans-serif;
+}
+
+body dialog.profile-dialog::backdrop {
+  background: #030a17b8;
+  backdrop-filter: blur(6px);
+}
+
+.profile-dialog .profile-dialog-form {
+  position: relative;
+  margin: 0;
+}
+
+.profile-dialog .profile-kicker {
+  display: block;
+  margin-bottom: 8px;
+  color: #8593a7;
+  font-size: 8px;
+  letter-spacing: 1.6px;
+}
+
+.profile-dialog h2 {
+  position: static;
+  margin: 0 0 16px;
+  padding-right: 15px;
+  color: #17243b;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.8px;
+}
+
+.profile-dialog p {
+  margin: 0;
+  color: #6e819a;
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+.profile-dialog label {
+  display: block;
+  margin: 16px 0 0;
+  color: #17243b;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.profile-dialog input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  color: #17243b;
+  background: #fff;
+  border: 1px solid #dae3ef;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.profile-dialog input:focus-visible {
+  outline: 2px solid #6a9300;
+  outline-offset: 4px;
+}
+
+.profile-dialog .profile-storage-note {
+  margin-top: 17px;
+  padding: 13px 15px;
+  background: #f5f8fc;
+  border: 1px solid #e1e8f2;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.profile-dialog .profile-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.profile-dialog button {
+  min-width: 0;
+  padding: 12px 18px;
+  border: 1px solid #dae3ef;
+  border-radius: 12px;
+  background: #f5f8fc;
+  color: #17243b;
+  font:
+    600 12px/1.6 "Noto Sans KR",
+    "Malgun Gothic",
+    sans-serif;
+}
+
+.profile-dialog .profile-actions button {
+  flex: 1;
+  min-height: 48px;
+}
+
+.profile-dialog .profile-save {
+  color: #fff;
+  background: #ff681d;
+  border-color: #ff681d;
+  box-shadow: 0 6px 16px #ff681d18;
+}
+
+.profile-dialog .profile-close {
+  position: absolute;
+  top: -19px;
+  right: -19px;
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  color: #72829b;
+  font-size: 25px;
+  font-weight: 400;
+}
+
+.profile-dialog .profile-error {
+  margin-top: 10px;
+  color: #b34520;
+}
+
+.profile-dialog .profile-error:empty {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  body dialog.profile-dialog {
+    padding: 24px;
+  }
+
+  .profile-dialog h2 {
+    font-size: 20px;
+  }
+}

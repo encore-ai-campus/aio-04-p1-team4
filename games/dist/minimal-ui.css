@@ -1,0 +1,579 @@
+/* Minimal Lunch Run shell. Game artwork and animations stay in styles.css. */
+.theme-white {
+  --orange: #ff681d;
+  --text: #182133;
+  --muted: #7b8493;
+  --line: #e5e7eb;
+  --lime: #ff681d;
+  background: #fff;
+  color: var(--text);
+}
+
+.theme-white .topbar {
+  max-width: 1280px;
+  height: 76px;
+  margin: 0 auto;
+  padding: 0 36px;
+  border-bottom: 1px solid var(--line);
+}
+
+.theme-white .brand img {
+  width: 150px;
+  height: auto;
+}
+
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.header-tools > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.header-tools [data-shell] > span {
+  font-size: 24px;
+}
+
+.theme-white .header-tools .nav-item::after {
+  display: none;
+}
+
+.header-tools #saved-count {
+  color: var(--muted);
+}
+
+.theme-white .app-shell {
+  display: block;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.theme-white #main {
+  width: 100%;
+  min-width: 0;
+  padding: 48px 228px 24px 48px;
+}
+
+.theme-white .hero,
+.theme-white .double-draw-banner,
+.theme-white .progress-bar,
+.theme-white .board-top,
+.theme-white .play-heading .section-index,
+.theme-white .play-heading h2 {
+  display: none;
+}
+
+.game-page-heading h1 {
+  margin: 0 0 28px;
+  font-size: clamp(25px, 2.7vw, 34px);
+  font-weight: 700;
+  letter-spacing: -1.4px;
+}
+
+/* Keep the selection cards separate from the selected game's controls. */
+[data-game-screen="select"] #view-game .play-layout,
+[data-game-screen="select"] #view-game .group-settings,
+[data-game-screen="play"] #view-game .play-heading,
+[data-game-screen="play"] #view-game #game-options {
+  display: none;
+}
+
+[data-game-screen="play"] .game-page-heading {
+  margin-bottom: 14px;
+}
+
+#game-page-title:focus {
+  outline: none;
+}
+
+#conditions-summary {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.theme-white .play-heading {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 18px 0;
+}
+
+.theme-white .play-heading > div:first-child {
+  display: none;
+}
+
+.theme-white .mode-tabs {
+  display: flex;
+  width: auto;
+  min-height: 0;
+  background: #f7f8fa;
+  border: 1px solid #eceef1;
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.theme-white .mode-tabs button {
+  min-height: 0;
+  flex: 0 0 auto;
+  width: auto;
+  white-space: nowrap;
+  padding: 8px 14px;
+  border-radius: 9px;
+  color: #727b8b;
+}
+
+.theme-white .mode-tabs button.active {
+  color: #d65210;
+  background: #fff;
+  box-shadow: 0 1px 4px #1821330d;
+}
+
+.theme-white #game-options,
+.theme-white.intersection-mode #game-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.theme-white .game-option {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  min-height: 142px;
+  padding: 24px;
+  overflow: hidden;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #e2e5e9;
+  border-radius: 17px;
+  box-shadow: 0 2px 5px #18213303;
+}
+
+.theme-white .game-option:hover,
+.theme-white .game-option.active {
+  border-color: var(--orange);
+  background: #fffaf7;
+}
+
+.theme-white .game-option > span:not(.game-option-icon) {
+  position: relative;
+  z-index: 1;
+  max-width: 68%;
+}
+
+.theme-white .game-option strong {
+  display: block;
+  color: var(--text);
+  font-size: 21px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.theme-white .game-option small {
+  display: block;
+  color: #777f8d;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.game-option-art {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  width: 125px;
+  height: 110px;
+  object-fit: contain;
+  transform: translateY(-50%);
+}
+
+.theme-white .game-option-check {
+  display: none;
+}
+
+.theme-white .game-option-icon {
+  order: 2;
+  margin-left: auto;
+  color: var(--orange);
+  font-size: 54px;
+}
+
+.theme-white .play-layout {
+  display: block;
+  margin: 0;
+}
+
+.theme-white .play-board {
+  padding: 26px 24px 22px;
+  background: #fff;
+  border: 1px solid #e2e5e9;
+  border-radius: 18px;
+  box-shadow: none;
+}
+
+.theme-white .game-stage {
+  min-height: 0;
+  padding: 0;
+}
+
+.theme-white .stage-heading {
+  margin-bottom: 8px;
+}
+
+.theme-white .stage-heading h3 {
+  font-size: clamp(22px, 2.3vw, 29px);
+  letter-spacing: -1px;
+  color: var(--text);
+}
+
+.theme-white .stage-heading p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.theme-white .machine-scene {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 245px;
+  margin: 8px auto 0;
+}
+
+.theme-white .machine-scene::before {
+  display: none;
+}
+
+.theme-white .gacha-machine {
+  width: 240px;
+  height: 230px;
+  object-fit: contain;
+  filter: none;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Leave the heading coordinates unchanged while fitting play controls above
+   the fold on desktop and smaller laptop screens. */
+[data-game-screen="play"] .play-board {
+  padding-top: 14px;
+  padding-bottom: 12px;
+}
+
+[data-game-screen="play"] .machine-scene {
+  height: clamp(110px, 23vh, 165px);
+  margin-top: 0;
+}
+
+[data-game-screen="play"] .gacha-machine {
+  height: 100%;
+  max-height: 200px;
+}
+
+[data-game-screen="play"] .stage-heading {
+  margin-bottom: 0;
+}
+
+.theme-white[data-game-screen="play"] .game-actions {
+  margin-top: 2px;
+  gap: 8px;
+  padding: 0;
+}
+
+.theme-white[data-game-screen="play"] .play-cta {
+  padding: 9px 24px;
+  min-height: 40px;
+}
+
+.theme-white[data-game-screen="play"] .game-footnote {
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.theme-white[data-game-screen="play"] .main-footer {
+  display: none;
+}
+
+.theme-white[data-game-screen="play"] .wheel-scene {
+  width: min(220px, 30vh);
+  height: min(220px, 30vh);
+  margin: 8px auto;
+}
+
+.theme-white[data-game-screen="play"] .roulette-wheel {
+  width: 100%;
+  height: 100%;
+}
+
+.theme-white[data-game-screen="play"] .draw-grid {
+  padding: 12px 0;
+  gap: 8px;
+}
+
+.theme-white[data-game-screen="play"] .draw-card {
+  min-height: 85px;
+}
+
+.theme-white .machine-caption,
+.theme-white .float-food,
+.theme-white .orbit {
+  display: none;
+}
+
+.theme-white .primary {
+  color: #fff;
+  background: var(--orange);
+  border-color: var(--orange);
+  border-radius: 12px;
+}
+
+.theme-white .primary:hover {
+  color: #fff;
+  background: #ee5911;
+}
+
+.theme-white .play-cta {
+  min-width: 250px;
+  padding: 12px 28px;
+  border-radius: 28px;
+  box-shadow: none;
+  font-size: 16px;
+}
+
+.theme-white .game-actions {
+  margin-top: 6px;
+}
+
+.theme-white .game-footnote {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stage-dock {
+  position: fixed;
+  z-index: 10;
+  right: max(22px, calc((100vw - 1280px) / 2 + 25px));
+  bottom: 60px;
+  width: 170px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e9ebee;
+  border-radius: 24px;
+  box-shadow: 0 4px 12px #18213312;
+}
+
+.stage-dock button {
+  padding: 12px 8px;
+  color: var(--text);
+  background: #f8f9fb;
+  border: 1px solid #e2e5e9;
+  border-radius: 16px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.stage-dock button.active {
+  color: #fff;
+  background: var(--orange);
+  border-color: var(--orange);
+}
+
+#conditions-dialog {
+  width: min(460px, calc(100vw - 24px));
+  max-height: calc(100dvh - 40px);
+  padding: 0;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  overflow-y: auto;
+}
+
+#conditions-dialog::backdrop {
+  background: #18213355;
+}
+
+.theme-white #conditions-dialog .sidebar {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 34px 28px 28px;
+  background: #fff;
+  border: 0;
+  overflow: visible;
+}
+
+.conditions-close {
+  position: absolute;
+  top: 9px;
+  right: 12px;
+  padding: 2px 10px;
+  font-size: 28px;
+}
+
+.theme-white .main-footer {
+  justify-content: center;
+  margin-top: 28px;
+  padding: 18px 0 0;
+  border: 0;
+  color: #8b929f;
+}
+
+.main-footer > * {
+  display: none;
+}
+
+.main-footer::after {
+  content: "LUNCH RUN　/　SINCE 2026";
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.room-invite-page .game-page-heading,
+.room-invite-page .stage-dock,
+.room-invite-page .header-tools {
+  display: none;
+}
+
+@media (max-width: 1000px) {
+  .theme-white #main {
+    padding: 34px 190px 24px 24px;
+  }
+
+  .stage-dock {
+    right: 16px;
+    width: 150px;
+  }
+
+  .theme-white .game-option {
+    min-height: 130px;
+    padding: 18px;
+  }
+
+  .game-option-art {
+    width: 95px;
+    opacity: 0.85;
+  }
+
+  .theme-white .game-option strong {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 760px) {
+  .theme-white .topbar {
+    height: 64px;
+    padding: 0 20px;
+  }
+
+  .theme-white .brand img {
+    width: 112px;
+  }
+
+  .header-tools {
+    gap: 16px;
+  }
+
+  .header-tools .nav-item,
+  .header-tools .avatar {
+    display: none;
+  }
+
+  .theme-white #main {
+    padding: 30px 18px 112px;
+  }
+
+  .game-page-heading h1 {
+    margin-bottom: 16px;
+  }
+
+  #conditions-summary {
+    font-size: 12px;
+  }
+
+  .theme-white .play-heading {
+    justify-content: flex-start;
+  }
+
+  .theme-white .mode-tabs {
+    width: 100%;
+    display: flex;
+  }
+
+  .theme-white .mode-tabs button {
+    flex: 1;
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  .theme-white #game-options,
+  .theme-white.intersection-mode #game-options {
+    gap: 10px;
+  }
+
+  .theme-white .game-option {
+    min-height: 142px;
+    align-items: flex-start;
+    padding: 16px 12px;
+  }
+
+  .theme-white .game-option > span:not(.game-option-icon) {
+    max-width: 100%;
+  }
+
+  .theme-white .game-option strong {
+    font-size: 17px;
+    margin-bottom: 4px;
+  }
+
+  .theme-white .game-option small {
+    max-width: 120px;
+    font-size: 10px;
+  }
+
+  .game-option-art {
+    top: auto;
+    bottom: 0;
+    right: 2px;
+    width: 76px;
+    height: 66px;
+    transform: none;
+  }
+
+  .theme-white .play-board {
+    padding: 24px 14px 18px;
+  }
+
+  .stage-dock {
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 5px;
+    padding: 8px;
+    border-radius: 18px;
+  }
+
+  .stage-dock button {
+    padding: 12px 2px;
+    font-size: 12px;
+    border-radius: 12px;
+  }
+}

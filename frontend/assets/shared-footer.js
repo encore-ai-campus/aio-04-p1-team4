@@ -1,0 +1,1 @@
+(()=>{function fit(){const scale=Math.min(1,innerWidth/1516,innerHeight/1038),root=document.documentElement;root.style.setProperty('--footer-x',((innerWidth-1516*scale)/2+55*scale)+'px');root.style.setProperty('--footer-y',978*scale+'px');root.style.setProperty('--footer-font',14*scale+'px');}fit();window.addEventListener('resize',fit);})();

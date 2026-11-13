@@ -1,7 +1,7 @@
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function harness(fetch){
- const storage=new Map(),window={addEventListener(){}};
+ const storage=new Map(),window={addEventListener(){},removeEventListener(){}};
  const context=vm.createContext({window,sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},fetch,AbortController,AbortSignal,TextDecoder,Uint8Array,setTimeout,clearTimeout,Date});
  for(const name of ['state.js','chat.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,'../frontend',name),'utf8'),context);
  const nodes=new Map(),root={id:'home-chat',html:'',get innerHTML(){return this.html;},set innerHTML(v){this.html=v;nodes.clear();},

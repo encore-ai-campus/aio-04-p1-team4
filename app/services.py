@@ -377,7 +377,7 @@ async def chat(message: str, conditions: Conditions, menu_id: str | None, locati
                 session, displayed.restaurant_id, parsed.requested_detail,
                 selected_menu_id, conditions.budget, displayed,
             )
-            response.update(text=text, restaurant_detail=detail)
+            response.update(text=text, restaurant_detail=detail, restaurant_guidance=bool(selected_menu_id))
     else:
         target = parsed.menu_id
         if parsed.intent == "search_restaurants":
@@ -433,6 +433,6 @@ async def chat(message: str, conditions: Conditions, menu_id: str | None, locati
             text = f"추천 메뉴: {result['menu']['name']}\n{summary}\n" + '\n'.join(lines)
         # 응답의 최상위 문장과 구조화 결과의 안내문이 서로 다르지 않게 맞춘다.
         result["message"] = text
-        response.update(result=result, text=text)
+        response.update(result=result, text=text, restaurant_guidance=bool(result.get("menu")))
     response["_session"] = session_meta
     return response

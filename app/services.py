@@ -348,7 +348,7 @@ async def chat(message: str, conditions: Conditions, menu_id: str | None, locati
             selected_menu_id,
             conditions.budget,
         )
-        response.update(text=text, restaurant_detail=detail)
+        response.update(text=text, restaurant_detail=detail, restaurant_guidance=bool(selected_menu_id))
     else:
         target = parsed.menu_id
         if parsed.intent == "search_restaurants":
@@ -384,6 +384,8 @@ async def chat(message: str, conditions: Conditions, menu_id: str | None, locati
                 f"{len(result.get('candidate_restaurants', []))}곳\n{replies['notice']}") if has_places else result["message"]
         if has_places and result["menu"].get("serving_unverified"):
             text += "\n인분 미확인 상품은 매장 표시 가격 기준입니다."
-        response.update(result=result, text=text)
+        if result.get("menu") and parsed.intent in {"recommend_menu", "reroll_menu"}:
+            text += "\n식당을 안내해 드릴까요?"
+        response.update(result=result, text=text, restaurant_guidance=bool(result.get("menu")))
     response["_session"] = session_meta
     return response

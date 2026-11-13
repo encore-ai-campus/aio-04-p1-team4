@@ -22,7 +22,7 @@
     <link rel="stylesheet" href="./minimal-ui.css" />
     <link
       rel="stylesheet"
-      href="/assets/shared-header.css?v=20261112-stable-header"
+      href="/assets/shared-header.css?v=dock-four"
     />
     <link rel="modulepreload" href="./engine.mjs" />
     <link
@@ -30,7 +30,7 @@
       href="/assets/profile-dialog.css?v=20261112-profile"
     />
     <script src="/assets/profile-dialog.js?v=20261112-profile"></script>
-  </head>
+  <link rel="stylesheet" href="/static/assets/shared-dock.css?v=dock-four"><link rel="stylesheet" href="/static/assets/shared-page.css?v=dock-four"><link rel="stylesheet" href="/static/assets/game-navigation.css?v=game-nav"></head>
   <body class="theme-white" data-game-screen="select">
 
     <a class="skip" href="#main">본문으로 이동</a>
@@ -43,7 +43,7 @@
           <svg class="location-icon" viewBox="0 0 32 32" aria-hidden="true">
             <path d="M16 29s10-11 10-18a10 10 0 0 0-20 0c0 7 10 18 10 18Z" />
             <circle cx="16" cy="11" r="4" /></svg
-          ><span class="location-label">위치</span>
+          ><span class="location-label">위치설정</span>
         </button>
         <button
           type="button"
@@ -175,9 +175,9 @@
         <nav class="stage-dock" aria-label="진행 단계">
           <button type="button" data-shell="home">조건 설정</button>
           <button type="button" data-shell="ai">AI 추천</button>
-          <button type="button" data-shell="game">게임 선택</button>
+          <button type="button" class="active" aria-current="step" data-shell="game">게임 선택</button>
           <button type="button" data-shell="restaurants">식당 선택</button>
-          <button type="button" data-shell="route">경로 확인</button>
+
         </nav>
 
         <footer class="main-footer">
@@ -204,10 +204,10 @@
     <link rel="stylesheet" href="/static/location-picker.css" />
 <link rel="stylesheet" href="/static/chat.css" />
 <link rel="stylesheet" href="./rooms.css?v=stage3" />
-<link rel="stylesheet" href="./game-integration.css?v=stage3" />
-<script src="/static/state.js"></script><script src="/static/location.js"></script>
+<link rel="stylesheet" href="./game-integration.css?v=ladder-button-size" />
+<script src="/static/state.js?v=dock-four"></script><script src="/static/location.js"></script>
 <script src="/static/location-picker.js"></script><script src="/static/chat.js"></script>
 <script>document.body.dataset.gameScreen=location.pathname.split('/').filter(Boolean).at(-1)==='play'?'play':'select';</script>
-<script type="module" src="./app.mjs?v=stage3"></script>
-  </body>
+<script type="module" src="./app.mjs?v=ladder-labels"></script>
+  <link rel="stylesheet" href="/static/assets/shared-footer.css?v=center-chrome"><script src="/static/assets/shared-footer.js?v=center-chrome"></script><script src="/static/assets/header-location.js?v=dock-four"></script></body>
 </html>

@@ -16,3 +16,6 @@ window.LunchRunMotion = (() => {
 
   return { enter };
 })();
+
+// Cross-page transitions can be canceled by back/forward or non-participating pages.
+for(const type of ['pageswap','pagereveal'])window.addEventListener(type,event=>{const transition=event.viewTransition;if(transition){transition.ready.catch(()=>{});transition.finished.catch(()=>{});transition.updateCallbackDone?.catch(()=>{});}});

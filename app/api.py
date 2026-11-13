@@ -383,6 +383,9 @@ async def chat_session(request: Request, response: Response,
         "location": state.location.model_dump() if state.location else None,
         "radius_m": state.radius_m,
         "selected_menu": selected_menu,
+        "restaurant_guidance": bool(selected_menu) and state.last_intent in {
+            "recommend_menu", "reroll_menu", "search_restaurants", "ask_restaurant_detail"
+        },
         "restaurant_ids": state.restaurant_ids,
         "candidate_restaurant_ids": state.candidate_restaurant_ids,
         "pending_action": (

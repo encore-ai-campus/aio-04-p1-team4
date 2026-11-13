@@ -69,6 +69,7 @@ window.LunchRunProfile = (() => {
         temporaryProfile = value;
       }
       updateHeader(value);
+      window.dispatchEvent(new Event("lunchrun:profile-change"));
       onChange?.(value);
       dialog.close();
     }
@@ -98,5 +99,21 @@ window.LunchRunProfile = (() => {
 
   document.addEventListener("DOMContentLoaded", () => updateHeader());
   window.addEventListener("pageshow", () => updateHeader());
-  return { open, readName, updateHeader };
+  function showNoMenus() {
+    if (document.querySelector('.no-menu-dialog[open]')) return;
+    const dialog = document.createElement('dialog');
+    dialog.className = 'profile-dialog no-menu-dialog';
+    dialog.setAttribute('aria-label', '메뉴 안내');
+    dialog.innerHTML = `<form method="dialog" class="profile-dialog-form">
+      <button type="submit" class="profile-close" aria-label="창 닫기">×</button>
+      <h2>메뉴 안내</h2>
+      <p class="no-menu-message">현재 위치, 예산, 영업 조건에 맞는<br>메뉴가 없습니다.</p>
+      <div class="profile-actions"><button class="profile-save" type="submit">확인</button></div>
+    </form>`;
+    dialog.onclick = event => { if (event.target === dialog) dialog.close(); };
+    dialog.addEventListener('close', () => dialog.remove(), {once:true});
+    document.body.appendChild(dialog);
+    dialog.showModal();
+  }
+  return { open, readName, updateHeader, showNoMenus };
 })();

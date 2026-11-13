@@ -10,3 +10,40 @@
   .result-desc, .result-note { font-size: 12px; line-height: 1.6; }
   .result-stats > span { font-size: 11px; }
 }
+
+.theme-white .game-option[data-game="ladder"] .game-option-art{object-fit:contain;object-position:center;right:12px;padding:5px;animation:none;filter:none}
+@media(max-width:760px){.theme-white .game-option[data-game="ladder"] .game-option-art{right:8px;bottom:6px;padding:2px}}
+
+/* Result contents form one centered, compact stack inside the game box. */
+.theme-white[data-game-screen="play"] .play-board:has(.result-scene){display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:370px;padding:24px;text-align:center}
+.theme-white .play-board:has(.result-scene) #game-stage{width:100%;flex:none;min-height:0;padding:0;display:flex;justify-content:center;align-items:center}
+.theme-white .result-scene{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;width:100%;max-width:680px;margin:0 auto;padding:60px 0 0;text-align:center}
+.theme-white .result-scene::before,.theme-white .result-scene::after{display:block}
+.theme-white .result-scene .confetti{position:absolute;top:23px;left:0;right:0;display:flex;justify-content:space-around;gap:0;height:30px;margin:0;font-size:21px;line-height:30px;transform:none;pointer-events:none}
+.theme-white .result-scene .confetti>span{transform:translateY(-9px);font-size:16px}
+.theme-white .result-scene .result-kicker{position:static;margin:0;line-height:1.5}
+.theme-white .result-scene .result-title{margin:0;font-size:30px;line-height:1.4}
+.theme-white .result-scene .result-stats{margin:0;justify-content:center;gap:8px}
+.theme-white .result-scene .result-note{margin:0;font-size:12px;line-height:1.6;color:#607188}
+.theme-white[data-game-screen="play"] .play-board:has(.result-scene) .game-actions{width:100%;justify-content:center;margin:14px 0 0;padding:0;gap:8px}
+.theme-white[data-game-screen="play"] .play-board:has(.result-scene) .game-footnote{width:100%;margin:8px 0 0;font-size:12px;line-height:1.5;text-align:center}
+@media(max-width:760px){.theme-white[data-game-screen="play"] .play-board:has(.result-scene){padding:22px 14px;min-height:340px}.theme-white .result-scene{gap:10px}.theme-white .result-scene .result-title{font-size:27px}.theme-white .result-scene .result-note,.theme-white[data-game-screen="play"] .play-board:has(.result-scene) .game-footnote{font-size:11px}}
+
+/* Clear, flat styling for the ladder game. */
+.theme-white .play-board:has(.ladder-wrap),.theme-white .ladder-wrap,.theme-white .ladder-svg{background:#f7f7f7;background-image:none}
+.theme-white .ladder-wrap{padding:16px;border-radius:12px}
+.theme-white .ladder-starts button,.theme-white .ladder-starts button.selected{color:#fff;font-weight:800;font-size:13px;background:#243550;border-color:#243550;min-height:38px}
+.theme-white .ladder-starts button:hover:not(:disabled){background:#18233b;color:#fff}
+.theme-white .ladder-starts button.selected{background:#ff681d;border-color:#ff681d}
+.theme-white .ladder-starts button:disabled{color:#fff;font-weight:800}
+.theme-white .ladder-svg>g[stroke]{stroke:#607188;stroke-width:3}
+.theme-white .ladder-svg text{fill:#ff681d;font-size:20px;font-weight:800}
+@media(max-width:760px){.theme-white .ladder-wrap{padding:12px 4px}.theme-white .ladder-starts button{font-size:12px}}
+
+.theme-white .play-board:has(.ladder-wrap) .game-actions{width:100%;display:flex;justify-content:center}
+.theme-white .ladder-log:empty{display:none}
+
+/* Same displayed size as the home actions, with centered placement. */
+.theme-white .play-board [data-action="reset-ladder"]{flex:0 0 auto;width:calc((min(100vw,1280px) - 606px) / 2);height:46px;min-height:46px;padding:8px 20px;border-radius:12px;font-size:12px;line-height:1.6;font-weight:700;max-width:100%}
+@media(min-width:761px) and (max-width:1000px){.theme-white .play-board [data-action="reset-ladder"]{width:calc((100vw - 478px) / 2)}}
+@media(max-width:760px){.theme-white .play-board [data-action="reset-ladder"]{width:calc(100vw - 40px);max-width:none}}

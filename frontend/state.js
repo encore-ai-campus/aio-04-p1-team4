@@ -3,7 +3,7 @@ window.LunchRunState=(()=>{
   const KEY='lunchrun:state:v1',listeners=new Set();
   const cuisines=['전체','한식','중식','일식/회','양식','분식','패스트푸드','치킨','도시락/구내식당','뷔페식','냉면','고기','카페/빵','술집','기타'];
   const copy=value=>JSON.parse(JSON.stringify(value));
-  const defaults=()=>({schema:1,revision:0,contextRevision:0,location:null,conditions:{budget:5000,radius_m:500,cuisine:'전체',people:1,deadline:Date.now()+50*60000},menu:null,restaurants:[],candidateRestaurants:[],selectedRestaurantId:null,route:null,game:null,chat:null,searchedAt:null});
+  const defaults=()=>({schema:1,revision:0,contextRevision:0,location:null,conditions:{budget:5000,radius_m:500,cuisine:'전체',people:1,deadline:Date.now()+60*60000},menu:null,restaurants:[],candidateRestaurants:[],selectedRestaurantId:null,route:null,game:null,chat:null,searchedAt:null});
   let memory=defaults();
   function validLocation(p){return p&&Number.isFinite(p.lat)&&Number.isFinite(p.lng)&&Math.abs(p.lat)<=90&&Math.abs(p.lng)<=180&&typeof p.name==='string'&&p.name.length>0&&p.name.length<=200&&['geolocation','address','place'].includes(p.source);}
   function cleanLocation(p){
@@ -18,6 +18,7 @@ window.LunchRunState=(()=>{
     try{
       const raw=sessionStorage.getItem(KEY);
       if(raw){const saved=JSON.parse(raw);
+        if(saved.conditions&&Number.isInteger(saved.conditions.radius_m)&&saved.conditions.radius_m>500&&saved.conditions.radius_m<=1000){saved.conditions.radius_m=500;saved.contextRevision=(saved.contextRevision||0)+1;saved.menu=null;saved.restaurants=[];saved.candidateRestaurants=[];saved.selectedRestaurantId=null;saved.route=null;saved.searchedAt=null;sessionStorage.setItem(KEY,JSON.stringify(saved));}
         if(saved.schema!==1||!validConditions(saved.conditions)||!validMenu(saved.menu)||!Array.isArray(saved.restaurants)||!Array.isArray(saved.candidateRestaurants))throw Error('invalid saved state');
         saved.location=cleanLocation(saved.location);
         memory={...defaults(),...saved};
@@ -53,7 +54,8 @@ window.LunchRunState=(()=>{
     next.restaurants=copy(result.restaurants);next.candidateRestaurants=copy(result.candidate_restaurants||[]);
     next.selectedRestaurantId=null;next.route=null;next.searchedAt=Date.now();commit(next);return true;
   }
-  return {read,setContext,setMenu,setRestaurants,
+  function summary(){const s=read(),c=s.conditions;return [c.budget.toLocaleString('ko-KR')+'원',Math.max(0,Math.ceil((c.deadline-Date.now())/60000))+'분 남음',c.radius_m+'m',c.people+'명',c.cuisine,s.location?.address||s.location?.name||'위치 미설정'].join(' / ');}
+  return {summary,read,setContext,setMenu,setRestaurants,
     hasSaved(){try{return sessionStorage.getItem(KEY)!==null;}catch{return false;}},
     remainingMinutes(deadline=read().conditions.deadline){return Math.max(0,Math.ceil((deadline-Date.now())/60000));},
     setSelection(id){const next=read();if(id!==null&&!next.restaurants.some(r=>r.id===id))return false;if(next.selectedRestaurantId!==id){next.selectedRestaurantId=id;next.route=null;commit(next);}return true;},

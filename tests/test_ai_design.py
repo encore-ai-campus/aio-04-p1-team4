@@ -74,12 +74,20 @@ def test_ai_design_db_conversation_proposal_and_recovery(database, monkeypatch):
                     expect(page.locator('.lr-chat-message')).to_have_count(count+2,timeout=15000)
                     expect(page.locator('.lr-chat textarea')).to_be_enabled()
 
+                expect(page.locator('[data-chat-route]')).to_be_disabled()
                 page.locator('.lr-chat textarea').fill('메뉴')
                 page.locator('.lr-chat textarea').press('Shift+Enter')
                 assert page.locator('.lr-chat textarea').input_value()=='메뉴\n'
                 send('메뉴 추천해줘',{'intent':'recommend_menu'})
-                expect(page.locator('.lr-chat-menu')).to_contain_text('짜장면')
-                expect(page.locator('.lr-chat-menu')).to_contain_text('인분 미확인')
+                expect(page.locator('[data-chat-route]')).to_be_enabled()
+                expect(page.locator('.lr-chat-message').last).to_contain_text('식당을 안내해 드릴까요?')
+                assert page.locator('.lr-chat-menu, .lr-chat-map, .lr-chat-note').count() == 0
+                assert page.locator('.lr-chat-time').count() == 2
+                expect(page.locator('.lr-chat-user small')).to_have_text('게스트')
+                page.locator('#account').click()
+                page.locator('#profile-nickname').fill('점심친구')
+                page.locator('.profile-save').click()
+                expect(page.locator('.lr-chat-user small')).to_have_text('점심친구')
                 send('식당 찾아줘',{'intent':'search_restaurants'})
                 assert page.evaluate('LunchRunState.read().restaurants.length')==1
                 send('그 식당 가격 알려줘',{'intent':'ask_restaurant_detail','restaurant_id':'one','requested_detail':'price'})
@@ -90,6 +98,7 @@ def test_ai_design_db_conversation_proposal_and_recovery(database, monkeypatch):
                 assert page.evaluate('LunchRunState.read().conditions.budget')==9000
                 page.screenshot(path=str(output/f'merged-proposal-{label}.png'),full_page=True)
                 page.locator('[data-chat-apply]').click()
+                expect(page.locator('[data-chat-route]')).to_be_disabled()
                 assert page.evaluate('LunchRunState.read().conditions.budget')==10000
                 assert page.evaluate('LunchRunState.read().menu') is None
                 assert page.evaluate('LunchRunState.read().restaurants')==[]
@@ -98,8 +107,14 @@ def test_ai_design_db_conversation_proposal_and_recovery(database, monkeypatch):
                 page.reload()
                 expect(page.locator('.lr-chat textarea')).to_be_enabled()
                 expect(page.locator('.lr-chat-message')).to_have_count(12)
+                assert page.evaluate('document.documentElement.scrollHeight<=innerHeight and document.documentElement.scrollWidth<=innerWidth'.replace(' and ',' && '))
+                actions=page.locator('.lr-chat-actions').bounding_box()
+                assert actions['y']+actions['height']<size['height']
+                if label=='mobile':
+                    assert actions['y']+actions['height']<page.locator('#dock').bounding_box()['y']
+                expect(page.locator('[data-chat-route]')).to_be_enabled()
                 assert page.evaluate('LunchRunState.read().conditions.budget')==10000
-                assert page.locator('.lr-chat-map').get_attribute('href')=='/games/'
+                assert page.locator('.lr-chat-map').count()==0
                 if label=='desktop':
                     panel=page.locator('#screen').bounding_box()
                     dock=page.locator('#dock').bounding_box()
@@ -133,6 +148,16 @@ def test_ai_design_db_conversation_proposal_and_recovery(database, monkeypatch):
                     try: route.abort()
                     except Exception: pass
                 page.unroute('**/api/chat/stream')
+                # Button searches the chosen menu, then enters the restaurant route screen.
+                page.locator('.lr-chat textarea').fill('메뉴 추천해줘')
+                plan.clear();plan.update({'intent':'recommend_menu'})
+                page.locator('.lr-chat textarea').press('Enter')
+                expect(page.locator('[data-chat-route]')).to_be_enabled()
+                plan.clear();plan.update({'intent':'search_restaurants'})
+                page.route('**/map/',lambda route:route.fulfill(content_type='text/html; charset=utf-8',body='<h1>식당경로 화면</h1>'))
+                page.locator('[data-chat-route]').click()
+                page.wait_for_url(origin+'/map/')
+                expect(page.locator('h1')).to_have_text('식당경로 화면')
                 assert errors==[]
                 page.close()
             external.assert_not_called()

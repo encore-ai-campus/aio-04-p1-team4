@@ -152,3 +152,5 @@ body dialog.profile-dialog::backdrop {
     font-size: 20px;
   }
 }
+
+.profile-dialog .no-menu-message{font-size:clamp(12px,3.4vw,17px);line-height:1.9;letter-spacing:-.5px;color:#17243b}

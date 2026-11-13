@@ -39,62 +39,19 @@ class RecommendationTests(unittest.TestCase):
         self.patcher = patch("app.clients.kakao.KakaoClient.search_restaurants", new_callable=AsyncMock)
         self.search = self.patcher.start()
         self.search.return_value = {"items": [ITEM], "has_more": True}
-        # 실제 카카오 페이지를 열지 않고 상세 수집 성공 상태를 DB에 만들어 API 연결을 검증합니다.
-        self.collection_patcher = patch(
-            "app.services.collect_restaurant_details_batch", new_callable=AsyncMock
-        )
+        # 조회 전에 테스트 DB에 확정 식당·상품·영업시간을 적재한다.
+        from app.database import PlaceDetailStatus
+        with self.test_database.session_factory.begin() as session:
+            row = Restaurant(id="test-place", name="테스트 식당", latitude=37.48, longitude=126.88,
+                cuisine="중식", category_name="음식점 > 중식", address="서울 테스트로 1",
+                detail_status=PlaceDetailStatus(menu_status="success", hours_status="success"))
+            row.menus.append(Menu(name="짜장면", normalized_name="짜장면", menu_catalog_id="noodle",
+                price=8000, price_status="known"))
+            row.business_hours = [BusinessHours(day_of_week=d, holiday=False, start_time=time(0),
+                end_time=time(0), ends_next_day=True) for d in range(7)]
+            session.add(row)
+        self.collection_patcher = patch("app.detail_collection.collect_restaurant_details_batch", new_callable=AsyncMock)
         self.collect_details = self.collection_patcher.start()
-
-        async def store_details(database, restaurant_ids, *, limit=3, **_options):
-            # 수집 TTL과 스트리밍 콜백이 추가돼도 테스트 수집기의 핵심 동작만 검증한다.
-            reports = []
-            with database.session_factory.begin() as session:
-                for restaurant_id in restaurant_ids[:limit]:
-                    restaurant = session.get(Restaurant, restaurant_id)
-                    restaurant.detail_status.menu_status = "success"
-                    restaurant.detail_status.hours_status = "success"
-                    if not restaurant.menus:
-                        restaurant.menus.append(
-                            Menu(
-                                name="짜장면",
-                                normalized_name="짜장면",
-                                price=8000,
-                                price_status="known",
-                            )
-                        )
-                    if not restaurant.business_hours:
-                        # 모든 요일을 24시간 구간으로 만들어 테스트 실행 시각과 무관하게 연다.
-                        restaurant.business_hours.extend(
-                            BusinessHours(
-                                day_of_week=day,
-                                holiday=False,
-                                start_time=time(0, 0),
-                                end_time=time(0, 0),
-                                ends_next_day=True,
-                                sequence=0,
-                            )
-                            for day in range(7)
-                        )
-                    reports.append(
-                        {
-                            "restaurant_id": restaurant_id,
-                            "menu_status": "success",
-                            "hours_status": "success",
-                        }
-                    )
-                    progress = _options.get("progress")
-                    if progress is not None:
-                        await progress(
-                            {
-                                "event": "collecting",
-                                "message": f"식당 상세정보를 수집하고 있어요 ({len(reports)}/{min(limit, len(restaurant_ids))}).",
-                                "completed": len(reports),
-                                "total": min(limit, len(restaurant_ids)),
-                            }
-                        )
-            return reports
-
-        self.collect_details.side_effect = store_details
 
     def tearDown(self):
         self.narration_patcher.stop()
@@ -106,18 +63,30 @@ class RecommendationTests(unittest.TestCase):
         self.test_database.dispose()
         self.temp_directory.cleanup()
 
-    def test_game_searches_selected_menu_once(self):
+    def test_game_reads_selected_menu_without_external_search(self):
         response = self.client.post("/api/recommendations", json=BODY)
         self.assertEqual(response.status_code, 200)
         result = response.json()
-        self.search.assert_awaited_once_with("짜장면", 37.48, 126.88, radius_m=500)
+        self.search.assert_not_awaited()
         self.assertEqual(result["restaurants"][0]["id"], "test-place")
         self.assertEqual(result["restaurants"][0]["price"], 8000)
         self.assertTrue(result["restaurants"][0]["menu_verified"])
         self.assertFalse(result["constraints_verified"])
         # 5단계부터 고정 배열이 아니라 SQLAlchemy 메뉴 카탈로그를 사용한다.
         self.assertFalse(result["menu_catalog_demo"])
-        self.assertTrue(result["has_more"])
+        self.assertFalse(result["has_more"])
+
+    def test_game_candidates_only_returns_backend_pool_without_external_search(self):
+        response = self.client.post("/api/menus/candidates", json={
+            "location": LOCATION, "radius_m": 500,
+            "conditions": {"budget": 9000, "minutes": 30, "cuisine": "중식"},
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([m["id"] for m in response.json()["menus"]], ["noodle"])
+        self.assertNotIn("menu", response.json())
+        self.search.assert_not_awaited()
+        self.collect_details.assert_not_awaited()
+        self.interpret.assert_not_awaited()
 
     def test_game_draw_respects_conditions_without_external_search(self):
         # 메뉴 추첨만으로 카카오 검색·Playwright·Groq가 실행되면 안 된다.
@@ -145,7 +114,7 @@ class RecommendationTests(unittest.TestCase):
         self.search.assert_not_awaited()
         self.collect_details.assert_not_awaited()
 
-    def test_search_result_is_saved_and_reports_count(self):
+    def test_stored_result_is_read_without_collection_or_insert(self):
         self.search.return_value = {
             "items": [{
                 **ITEM,
@@ -158,7 +127,9 @@ class RecommendationTests(unittest.TestCase):
         }
         response = self.client.post("/api/recommendations", json=BODY)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["storage"]["inserted"], 1)
+        self.assertNotIn("storage", response.json())
+        self.search.assert_not_awaited()
+        self.collect_details.assert_not_awaited()
         with self.test_database.session_factory() as session:
             stored = session.get(Restaurant, "test-place")
             self.assertIsNotNone(stored)
@@ -167,16 +138,17 @@ class RecommendationTests(unittest.TestCase):
     def test_chat_reuses_same_menu_search(self):
         response = self.client.post("/api/chat", json={**BODY, "message": "가까운 식당 보여줘"})
         self.assertEqual(response.status_code, 200)
-        self.search.assert_awaited_once_with("짜장면", 37.48, 126.88, radius_m=500)
+        self.search.assert_not_awaited()
         self.assertEqual(response.json()["result"]["restaurants"][0]["id"], "test-place")
 
     def test_empty_result_does_not_retry_or_expand_radius(self):
-        self.search.return_value = {"items": [], "has_more": False}
+        with self.test_database.session_factory.begin() as session:
+            session.get(Restaurant, "test-place").operating_status = "closed"
         result = self.client.post("/api/recommendations", json=BODY).json()
         self.assertEqual(result["restaurants"], [])
-        self.assertIn("검색 결과가 없습니다", result["message"])
+        self.assertIn("DB 메뉴가 없습니다", result["message"])
         self.assertEqual(result["radius_m"], 500)
-        self.search.assert_awaited_once()
+        self.search.assert_not_awaited()
 
     def test_no_catalog_candidate_never_calls_kakao(self):
         # 예시 카탈로그 후보가 없거나 유효하지 않은 ID면 외부 검색하지 않습니다.
@@ -186,13 +158,14 @@ class RecommendationTests(unittest.TestCase):
             self.assertEqual(result["restaurants"], [])
         self.search.assert_not_awaited()
 
-    def test_error_not_replaced_with_fake_restaurants(self):
+    def test_kakao_outage_does_not_affect_db_recommendations(self):
         self.search.side_effect = KakaoError("kakao_permission", "권한 확인 필요")
         for endpoint, extra in (("recommendations", {}), ("chat", {"message": "식당 보여줘"})):
             response = self.client.post(f"/api/{endpoint}", json={**BODY, **extra})
-            self.assertEqual(response.status_code, 502)
-            self.assertEqual(response.headers["X-Error-Code"], "kakao_permission")
-            self.assertNotIn("restaurants", response.json())
+            self.assertEqual(response.status_code, 200)
+            result = response.json().get("result") or response.json()
+            self.assertEqual(result["restaurants"][0]["id"], "test-place")
+            self.search.assert_not_awaited()
 
     def test_explanation_and_condition_proposal_do_not_search(self):
         for message, parsed in [("메뉴 설명해줘", QuestionInterpretation.model_validate({"intent":"explain_menu","menu_id":"noodle"}, context={"menu_ids":{"noodle"}})),
@@ -298,8 +271,8 @@ class RecommendationTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         selected = response.json()["result"]["menu"]
-        self.assertIsNotNone(selected)
-        self.assertNotEqual(selected["id"], "noodle")
+        # 唯一 DB 후보를 제외하면 seed로 보충하지 않는다.
+        self.assertIsNone(selected)
         # 메뉴만 다시 고르는 질문은 상세페이지 수집이나 카카오 검색을 시작하지 않는다.
         self.search.assert_not_awaited()
 
@@ -434,7 +407,7 @@ class RecommendationTests(unittest.TestCase):
         self.assertIn("8,000원", payload["text"])
         self.assertEqual(payload["restaurant_detail"]["price"], 8000)
         # 후속 질문은 저장 DB만 읽으므로 카카오 검색은 최초 한 번뿐이다.
-        self.search.assert_awaited_once()
+        self.search.assert_not_awaited()
 
     def test_restaurant_hours_followup_calculates_current_korea_time(self):
         self.client.post(
@@ -509,7 +482,7 @@ class RecommendationTests(unittest.TestCase):
             )
             self.assertEqual(response.status_code, 200)
             self.assertIn(expected, response.json()["text"])
-        self.search.assert_awaited_once()
+        self.search.assert_not_awaited()
 
     def test_chat_stream_reports_progress_and_completed_result(self):
         # 실제 외부 호출 없이도 브라우저가 받는 JSON Lines 이벤트 순서를 검증한다.
@@ -527,7 +500,7 @@ class RecommendationTests(unittest.TestCase):
         self.assertIn("interpreting", names)
         self.assertIn("checking_database", names)
         self.assertIn("searching", names)
-        self.assertIn("collecting", names)
+        self.assertNotIn("collecting", names)
         self.assertIn("filtering", names)
         self.assertEqual(names[-1], "completed")
         self.assertEqual(events[-1]["data"]["result"]["restaurants"][0]["id"], "test-place")
@@ -560,3 +533,25 @@ class RecommendationTests(unittest.TestCase):
         self.assertEqual(events[-1]["event"], "failed")
         self.assertEqual(events[-1]["code"], "groq_rate_limit")
         self.search.assert_not_awaited()
+
+    def test_changed_conditions_do_not_reuse_previous_restaurant_context(self):
+        self.client.post('/api/chat', json={**BODY, 'message':'식당 조회'})
+        self.interpret.return_value = QuestionInterpretation.model_validate(
+            {'intent':'ask_restaurant_detail', 'restaurant_id':'test-place', 'requested_detail':'price'},
+            context={'menu_ids':{'noodle'}, 'restaurant_ids':{'test-place'}})
+        response = self.client.post('/api/chat', json={**BODY, 'menu_id':None,
+            'conditions':{'budget':1000, 'cuisine':'한식'}, 'message':'그 식당 가격'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.interpret.call_args.kwargs['restaurants'], [])
+        self.assertIn('다시 조회', response.json()['text'])
+        self.assertNotIn('restaurant_detail', response.json())
+        saved = self.client.get('/api/chat/session').json()
+        self.assertEqual(saved['restaurant_ids'], [])
+        self.assertIsNone(saved['selected_menu'])
+
+    def test_empty_reroll_clears_selected_menu_in_server_session(self):
+        self.client.post('/api/chat', json={**BODY, 'message':'식당 조회'})
+        self.interpret.return_value = QuestionInterpretation(intent='reroll_menu')
+        response = self.client.post('/api/chat', json={**BODY, 'message':'다른 메뉴'})
+        self.assertIsNone(response.json()['result']['menu'])
+        self.assertIsNone(self.client.get('/api/chat/session').json()['selected_menu'])

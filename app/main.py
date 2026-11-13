@@ -6,7 +6,7 @@ from time import perf_counter
 
 import anyio
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import router
@@ -14,6 +14,8 @@ from .chat_sessions import InMemoryChatSessionStore
 from .config import load_settings
 from .database import Database
 from .locations import router as location_router  # 실제 위치 검색용 라우터를 별도로 연결합니다.
+from .map_routes import router as map_router
+from games.app import create_proxy_router, proxy_lifespan as games_proxy_lifespan
 from .observability import (
     configure_logging,
     request_id_context,
@@ -33,7 +35,8 @@ async def lifespan(application: FastAPI):
     # 로컬 프로토타입에서는 누락된 테이블만 생성합니다. 외부 DB 전환 시 마이그레이션으로 교체합니다.
     await anyio.to_thread.run_sync(application.state.database.init_schema)
     try:
-        yield
+        async with games_proxy_lifespan(application):
+            yield
     finally:
         # 메모리 세션은 개발용이므로 서버 종료 시 참조를 명시적으로 정리한다.
         await application.state.chat_sessions.clear()
@@ -58,6 +61,8 @@ app.state.chat_rate_limiter = InMemoryChatRateLimiter(
 )
 app.include_router(router)
 app.include_router(location_router)  # 추천용 가상 데이터와 위치 검색의 책임을 분리합니다.
+app.include_router(map_router)
+app.include_router(create_proxy_router("/games"), prefix="/games", tags=["games"])
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -116,7 +121,36 @@ def index():
     return FileResponse(STATIC / "index.html")
 
 
+@app.get("/config.json", include_in_schema=False)
+def frontend_config():
+    return JSONResponse({"apiBase": ""}, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/conditions", include_in_schema=False)
+def conditions_page():
+    """기존 조건 화면 주소는 홈으로 정규화한다."""
+    return RedirectResponse('/', status_code=307)
+
+
+def home_subpage():
+    """새로고침과 직접 접속에도 같은 화면 셸을 제공한다."""
+    return FileResponse(STATIC / 'index.html')
+
+
+for page in ('ai', 'budget', 'time', 'distance', 'people', 'group-input', 'play', 'result'):
+    app.add_api_route('/' + page, home_subpage, methods=['GET'], include_in_schema=False)
+
+
+@app.get('/restaurants', include_in_schema=False)
+@app.get('/route', include_in_schema=False)
+def legacy_map_page():
+    return RedirectResponse('/map/', status_code=307)
+
+
 # 브라우저에 공개해도 되는 JavaScript 키만 반환합니다. 전체 설정이나 REST/Groq 키는 반환하지 않습니다.
 @app.get("/api/public-config", include_in_schema=False)
 def public_config():
     return {"kakaoJavascriptKey": app.state.settings.kakao_javascript_key}
+
+
+app.mount("/", StaticFiles(directory=STATIC), name="frontend")

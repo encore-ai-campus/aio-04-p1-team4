@@ -7,6 +7,7 @@ from typing import Any, Iterable, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy.exc import IntegrityError, StatementError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import PlaceDetailStatus, Restaurant
@@ -76,7 +77,9 @@ def save_restaurants(
         try:
             # 건별 SAVEPOINT를 사용해 한 식당의 제약조건 오류만 되돌린다.
             with session.begin_nested():
-                restaurant = session.get(Restaurant, record.id)
+                postgres = session.get_bind().dialect.name == "postgresql"
+                restaurant = (session.scalar(select(Restaurant).where(Restaurant.kakao_id == record.id))
+                              if postgres else session.get(Restaurant, record.id))
                 values = {
                     "name": record.name,
                     "category_name": record.category or None,
@@ -88,7 +91,7 @@ def save_restaurants(
                 }
                 if restaurant is None:
                     # 신규 식당은 다음 상세 수집을 기다리는 pending 상태도 함께 만든다.
-                    restaurant = Restaurant(id=record.id, **values)
+                    restaurant = Restaurant(**({} if postgres else {"id": record.id}), kakao_id=record.id, **values)
                     restaurant.detail_status = PlaceDetailStatus()
                     session.add(restaurant)
                     action = "inserted"
@@ -100,6 +103,9 @@ def save_restaurants(
                         restaurant.detail_status = PlaceDetailStatus()
                     action = "updated"
                 session.flush()
+                if postgres and isinstance(candidate, dict):
+                    candidate["kakao_id"] = record.id
+                    candidate["id"] = restaurant.id
                 setattr(result, action, getattr(result, action) + 1)
         except (IntegrityError, StatementError, ValueError, TypeError):
             result.failed += 1

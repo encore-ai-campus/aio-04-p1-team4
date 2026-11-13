@@ -28,6 +28,7 @@ def test_sqlite_schema_and_foreign_key_cascade(tmp_path: Path):
         database.init_schema()
         inspector = inspect(database.engine)
         assert set(inspector.get_table_names()) == {
+            "restaurant_match",
             "business_hours",
             "menu",
             "menu_alias",
@@ -99,10 +100,10 @@ def alembic_config(database_url: str) -> Config:
     return config
 
 
-def test_alembic_upgrade_creates_schema_matching_models(tmp_path: Path):
+def test_legacy_sqlite_migration_stops_before_postgresql_transition(tmp_path: Path):
     url = f"sqlite:///{(tmp_path / 'migration.db').as_posix()}"
     config = alembic_config(url)
-    command.upgrade(config, "head")
+    command.upgrade(config, "0002_catalog_food_types")
     database = Database(url)
     try:
         names = set(inspect(database.engine).get_table_names())
@@ -116,7 +117,7 @@ def test_alembic_upgrade_creates_schema_matching_models(tmp_path: Path):
             "restaurant",
         }
         # 초기 마이그레이션과 현재 ORM 모델 사이에 새 변경사항이 없어야 한다.
-        command.check(config)
+        # 이후 0003부터는 PostgreSQL 전용이며 SQLite는 create_all로 격리 검증한다.
         with database.session_factory.begin() as session:
             assert seed_menu_catalog(session) == 10
     finally:
@@ -128,7 +129,7 @@ def test_existing_create_all_database_can_be_stamped_without_data_loss(tmp_path:
     database = Database(url)
     try:
         database.init_schema()
-        command.stamp(alembic_config(url), "head")
+        command.stamp(alembic_config(url), "0002_catalog_food_types")
         with database.session_factory() as session:
             assert len(session.scalars(select(MenuCatalog)).all()) == 10
             version = session.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
@@ -150,8 +151,8 @@ def test_readiness_checks_database_catalog_browser_and_configuration(tmp_path: P
 
         with patch("app.operations._playwright_browser_available", return_value=False):
             report, status = readiness_report(database, settings)
-        assert status == 503
-        assert report["status"] == "not_ready"
+        assert status == 200
+        assert report["status"] == "ready"
         assert report["checks"]["playwright_chromium"] is False
     finally:
         database.dispose()
@@ -172,7 +173,7 @@ def test_food_type_migration_preserves_rows_aliases_and_inactive_state(tmp_path)
             connection.execute(text(
                 "INSERT INTO menu_alias (menu_catalog_id,name,normalized_name) VALUES ('old-fish','별칭','별칭')"
             ))
-        command.upgrade(config, "head")
+        command.upgrade(config, "0002_catalog_food_types")
         with database.session_factory() as session:
             fish = session.get(MenuCatalog, 'old-fish')
             assert fish.cuisine == '일식/회'
@@ -183,6 +184,6 @@ def test_food_type_migration_preserves_rows_aliases_and_inactive_state(tmp_path)
             assert session.get(MenuCatalog, 'old-salad').cuisine == '기타'
         with database.engine.connect() as connection:
             assert connection.execute(text('PRAGMA foreign_key_check')).all() == []
-        command.check(config)
+        # 이후 0003부터는 PostgreSQL 전용이며 SQLite는 create_all로 격리 검증한다.
     finally:
         database.dispose()

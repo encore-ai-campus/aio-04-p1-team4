@@ -23,7 +23,6 @@ typing_extensions==4.16.0
 uvicorn==0.54.0
 transformers==4.57.1
 huggingface-hub==0.36.0
-streamlit==1.51.0
 python-dotenv==1.2.4
 safetensors>=0.4.5
 sentencepiece>=0.2.0
@@ -33,3 +32,4 @@ redis==8.1.0
 sqlalchemy == 2.1.8
 alembic==1.20.1
 playwright==1.64.1
+reportlab>=4.0,<5

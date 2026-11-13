@@ -1,0 +1,155 @@
+{
+  "groq_auth": {
+    "status": "connected",
+    "code": "ok",
+    "message": "인증과 설정 모델을 확인했습니다. 채팅 성공을 보장하는 검사는 아닙니다."
+  },
+  "map": {
+    "sdk": true,
+    "hint": "카카오 지도를 연결하고 있어요…",
+    "hint_hidden": true,
+    "images": 21,
+    "loaded_images": 21,
+    "external_responses": [
+      {
+        "host": "dapi.kakao.com",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "host": "t1.kakaocdn.net",
+        "status": 200,
+        "type": "script"
+      },
+      {
+        "host": "t1.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "t1.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "t1.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "t1.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      },
+      {
+        "host": "mts.kakaocdn.net",
+        "status": 200,
+        "type": "image"
+      }
+    ]
+  },
+  "chat": {
+    "messages": [
+      "나현재 위치와 예산 조건에 맞는 점심 메뉴 하나 추천해줘"
+    ],
+    "status": "AI 사용 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.",
+    "retry": 1,
+    "selected_menu": null,
+    "db_preview": []
+  }
+}

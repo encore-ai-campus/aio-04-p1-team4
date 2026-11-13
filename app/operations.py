@@ -52,7 +52,6 @@ def readiness_report(database: Database, settings: Settings) -> tuple[dict, int]
     required = [
         checks["database"],
         checks["menu_catalog"],
-        checks["playwright_chromium"],
         checks["kakao_configured"],
         checks["groq_configured"],
     ]
@@ -60,5 +59,7 @@ def readiness_report(database: Database, settings: Settings) -> tuple[dict, int]
     return {
         "status": "ready" if ready else "not_ready",
         "database_backend": database.engine.dialect.name,
+        "recommendation_source": "database",
+        "optional_checks": ["playwright_chromium"],
         "checks": checks,
     }, (200 if ready else 503)

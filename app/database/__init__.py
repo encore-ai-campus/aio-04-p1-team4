@@ -8,6 +8,7 @@ from .models import (
     MenuCatalog,
     PlaceDetailStatus,
     Restaurant,
+    RestaurantMatch,
 )
 from .session import Database, get_db
 
@@ -20,5 +21,6 @@ __all__ = [
     "MenuCatalog",
     "PlaceDetailStatus",
     "Restaurant",
+    "RestaurantMatch",
     "get_db",
 ]

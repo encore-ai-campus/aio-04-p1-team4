@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, time
+from uuid import uuid4
 
 from sqlalchemy import (
     Boolean,
@@ -12,6 +13,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    BigInteger,
+    Uuid,
     MetaData,
     String,
     Time,
@@ -41,10 +44,9 @@ class Base(DeclarativeBase):
 
 
 class MenuCatalog(Base):
-    """랜덤 추천과 카카오 검색에 사용하는 대표 메뉴 사전.
+    """실제 상품의 menu_catalog_id로 연결하는 대표 메뉴 사전.
 
-    식당 상세페이지에서 수집한 실제 메뉴는 ``Menu``에 저장한다. 이 테이블의
-    가격은 실제 매장 가격이 아니라 DB 정보가 부족할 때 후보를 좁히는 기준값이다.
+    실제 표시 가격은 Menu에서 조회하며 price_hint는 이전 구조의 호환 필드다.
     """
 
     __tablename__ = "menu_catalog"
@@ -65,7 +67,7 @@ class MenuCatalog(Base):
     cuisine: Mapped[str] = mapped_column(String(20), nullable=False)
     search_keyword: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
-    # price_hint는 카탈로그 필터용 기준값이며 실제 식당 가격으로 출력하지 않는다.
+    # 호환용 필드이며 DB 전용 추천 후보와 예산 판정에는 사용하지 않는다.
     price_hint: Mapped[int | None] = mapped_column(Integer, nullable=True)
     active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=true()
@@ -114,10 +116,14 @@ class Restaurant(Base):
         CheckConstraint("longitude BETWEEN -180 AND 180", name="longitude_range"),
         Index("ix_restaurant_location", "latitude", "longitude"),
         Index("ix_restaurant_cuisine", "cuisine"),
+        CheckConstraint("operating_status IN ('operating', 'closed', 'unknown')", name="operating_status_value"),
     )
 
     # 숫자로만 보여도 카카오 API 계약상 문자열이므로 문자열 PK로 보관한다.
-    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    id: Mapped[str] = mapped_column(String(40).with_variant(Uuid(as_uuid=False), "postgresql"), primary_key=True, default=lambda: str(uuid4()))
+    kakao_id: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True)
+    naver_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    operating_status: Mapped[str] = mapped_column(String(20), nullable=False, default="unknown", server_default="unknown")
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     category_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # category_name은 카카오 원문, cuisine은 검색에 쓸 첫 번째 음식 분류다.
@@ -125,7 +131,7 @@ class Restaurant(Base):
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
     address: Mapped[str] = mapped_column(String(500), nullable=False, default="")
-    place_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    place_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -166,6 +172,9 @@ class Menu(Base):
             name="price_status_value",
         ),
         Index("ix_menu_lookup", "normalized_name", "price"),
+        CheckConstraint("availability_status IN ('available', 'sold_out', 'unknown')", name="availability_status_value"),
+        CheckConstraint("(price_status = 'known' AND price > 0 AND price IS NOT NULL) OR (price_status IN ('missing', 'variable') AND price IS NULL)", name="price_status_consistent"),
+        Index("ix_menu_catalog_price", "menu_catalog_id", "price"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -182,6 +191,11 @@ class Menu(Base):
     )
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="menus")
+    menu_catalog_id: Mapped[str | None] = mapped_column(ForeignKey("menu_catalog.id", ondelete="SET NULL"), nullable=True)
+    availability_status: Mapped[str] = mapped_column(String(20), nullable=False, default="unknown", server_default="unknown")
+    source_provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class BusinessHours(Base):
@@ -231,6 +245,8 @@ class BusinessHours(Base):
     )
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="business_hours")
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class PlaceDetailStatus(Base):
@@ -270,3 +286,22 @@ class PlaceDetailStatus(Base):
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     restaurant: Mapped[Restaurant] = relationship(back_populates="detail_status")
+    menu_last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    hours_last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RestaurantMatch(Base):
+    """매칭 확정 전 원본 식당과 카카오 후보를 분리해 보관한다."""
+    __tablename__ = "restaurant_match"
+    __table_args__ = (
+        CheckConstraint("match_status IN ('matched', 'review', 'not_found')", name="match_status_value"),
+        Index("ix_restaurant_match_status", "match_status"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    restaurant_id: Mapped[str | None] = mapped_column(ForeignKey("restaurant.id", ondelete="SET NULL"), nullable=True)
+    source_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    candidate_kakao_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    match_status: Mapped[str] = mapped_column(String(20), nullable=False, default="review", server_default="review")
+    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

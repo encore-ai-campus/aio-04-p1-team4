@@ -108,6 +108,23 @@ async def readiness(request: Request, refresh: bool = False):
     )
 
 
+@router.post("/menus/candidates")
+async def game_menu_candidates(
+    body: RecommendationRequest,
+    request: Request,
+    session: Annotated[Session, Depends(get_db)],
+):
+    """게임 연출에 사용할 후보만 반환하며 외부 검색은 실행하지 않는다."""
+    result = await services.recommend(
+        body.conditions, body.location, body.radius_m,
+        KakaoClient(request.app.state.settings.map_api_key),
+        session=session, database=request.app.state.database,
+        search_restaurants=False,
+    )
+    return {"menus": result["menus"], "message": result["message"],
+            "location": body.location.model_dump(), "radius_m": body.radius_m}
+
+
 @router.post("/menus/draw")
 async def draw_menu(
     body: RecommendationRequest,
@@ -116,7 +133,7 @@ async def draw_menu(
 ):
     """게임 1단계: 현재 위치·반경·예산·음식 종류로 메뉴만 추첨한다."""
 
-    # 식당 검색과 Playwright는 사용자가 다음 버튼을 누를 때만 실행한다.
+    # 추첨 단계와 식당 조회 단계 모두 DB만 읽으며 외부 식당 검색은 실행하지 않는다.
     result = await services.recommend(
         body.conditions,
         body.location,
@@ -132,7 +149,7 @@ async def draw_menu(
 @router.post("/recommendations")
 async def recommendations(body: RecommendationRequest, request: Request,
                           session: Annotated[Session, Depends(get_db)]):
-    # 요청별 DB 세션을 서비스에 넘겨 카카오 검색 결과를 restaurant에 함께 저장합니다.
+    # 요청별 읽기 전용 DB 세션으로 확정 조건에 맞는 저장된 식당을 조회한다.
     client = KakaoClient(request.app.state.settings.map_api_key)
     try:
         result = await services.recommend(

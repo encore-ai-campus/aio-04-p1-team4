@@ -33,6 +33,14 @@ def _restaurant_url(database: Database, restaurant_id: str) -> str:
         return restaurant.place_url
 
 
+def _restaurant_target(database: Database, restaurant_id: str) -> tuple[str, str]:
+    with database.session_factory() as session:
+        restaurant = session.get(Restaurant, restaurant_id)
+        if restaurant is None or not restaurant.place_url:
+            raise LookupError("restaurant_not_found_or_url_missing")
+        return restaurant.place_url, restaurant.kakao_id or restaurant.id
+
+
 def _save(database: Database, restaurant_id: str, details) -> dict:
     """정규화 결과를 별도 DB 세션에서 저장한다."""
 
@@ -56,13 +64,14 @@ async def collect_restaurant_details(
 ) -> dict:
     """긴 브라우저 수집 중에는 DB 트랜잭션을 잡지 않고 결과만 짧게 저장한다."""
 
-    place_url = await anyio.to_thread.run_sync(
-        _restaurant_url, database, restaurant_id
+    place_url, kakao_id = await anyio.to_thread.run_sync(
+        _restaurant_target, database, restaurant_id
     )
     # 테스트에서는 가짜 수집기를 주입하고 실제 실행에서는 Playwright를 사용한다.
     active_collector = collector or KakaoPlaceCollector()
     try:
-        page = await active_collector.collect(restaurant_id, place_url)
+        # 외부 페이지 검증에는 내부 UUID가 아니라 실제 카카오 ID를 사용한다.
+        page = await active_collector.collect(kakao_id, place_url)
         details = parse_place_page(page)
         return await anyio.to_thread.run_sync(
             _save, database, restaurant_id, details

@@ -1,0 +1,51 @@
+/* 원본 AI 말풍선·입력 디자인에 현재 DB 챗봇을 연결한다. */
+.viewport:has(.app[data-view="ai"]) { height: auto; overflow: visible; }
+.app[data-view="ai"] { height: auto; min-height: 1038px; padding: 340px 0 70px; }
+.app[data-view="ai"] #screen { position: relative; top: 0; left: 81px; width: 980px; }
+.app[data-view="ai"] #home-chat { max-height: none; overflow: visible; }
+.app[data-view="ai"] footer { position: relative; left: 0; top: 0; bottom: auto; width: 100%; margin-top: 40px; }
+.app[data-view="ai"] #status { position: relative; top: 0; left: 81px; width: 980px; margin-top: 12px; }
+.app[data-view="ai"] .lr-chat { max-width: none; font-family: "Noto Sans KR", "Malgun Gothic", sans-serif; }
+.app[data-view="ai"] .lr-chat-context { color: #607188; font-size: 15px; line-height: 1.7; margin: 0 0 16px; }
+.app[data-view="ai"] .lr-chat-log { height: 280px; max-height: 280px; min-height: 0; padding: 22px; border: 1px solid #d3d9e3; border-radius: 18px; background: #fff; }
+.app[data-view="ai"] .lr-chat-message { padding: 0; border: 0; background: none; margin: 0 0 18px; }
+.app[data-view="ai"] .chat-bubble { max-width: 80%; padding: 14px 20px; border-radius: 18px; background: #f1f3f6; }
+.app[data-view="ai"] .chat-row.user .chat-bubble { background: #ff641a; color: #fff; }
+.app[data-view="ai"] .lr-chat-message small { display: block; color: #607188; font-size: 12px; margin-bottom: 6px; }
+.app[data-view="ai"] .chat-row.user small { color: #fff; }
+.app[data-view="ai"] .lr-chat-message p { margin: 0; font-size: 21px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.app[data-view="ai"] .lr-chat-empty { margin: 0; color: #607188; font-size: 21px; line-height: 1.6; }
+.app[data-view="ai"] .lr-chat-form { display: block; }
+.app[data-view="ai"] .lr-chat-label { display: block; margin: 22px 0 12px; font-size: 20px; }
+.app[data-view="ai"] .lr-chat-compose { display: block; width: 100%; margin: 0; }
+.app[data-view="ai"] .lr-chat textarea { box-sizing: border-box; width: 100%; height: 120px; min-height: 120px; max-height: 120px; margin: 0; padding: 12px 16px; resize: none; border: 1px solid #d3d9e3; border-radius: 14px; background: #fcfdff; font: inherit; font-size: 22px; line-height: 1.5; }
+.app[data-view="ai"] .lr-chat textarea:focus-visible { outline: 3px solid #ff641a55; outline-offset: 2px; }
+.app[data-view="ai"] .lr-chat-actions { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+.app[data-view="ai"] .lr-chat button { min-height: 48px; padding: 12px 24px; border: 1px solid #d3d9e3; border-radius: 14px; background: #fff; color: #18233b; font-size: 18px; font-weight: 700; }
+.app[data-view="ai"] .lr-chat button.primary { width: 480px; max-width: 100%; min-height: 64px; font-size: 22px; background: #ff641a; border-color: #ff641a; color: #fff; }
+.app[data-view="ai"] .lr-chat button:disabled { opacity: .5; cursor: wait; }
+.app[data-view="ai"] .lr-chat-status { display: flex; align-items: center; gap: 8px; min-height: 24px; margin: 12px 0; font-size: 14px; line-height: 1.6; color: #607188; }
+.app[data-view="ai"] .lr-chat-proposal { margin-top: 18px; padding: 18px 20px; border: 1px solid #ffd2b9; border-radius: 16px; background: #fff6ee; font-size: 16px; line-height: 1.7; }
+.app[data-view="ai"] .lr-chat-proposal p { margin: 8px 0 12px; }
+.app[data-view="ai"] .lr-chat-proposal button { background: #ff641a; border-color: #ff641a; color: #fff; }
+.app[data-view="ai"] .lr-chat-menu { margin: 18px 0 8px; font-size: 16px; line-height: 1.7; overflow-wrap: anywhere; }
+.app[data-view="ai"] .lr-chat-map { display: inline-flex; align-items: center; padding: 12px 18px; margin: 8px 0; border: 1px solid #ff641a; border-radius: 14px; color: #c94a0a; font-size: 16px; font-weight: 700; text-decoration: none; }
+.app[data-view="ai"] .lr-chat-note { margin-top: 14px; color: #607188; font-size: 13px; line-height: 1.7; }
+.lr-chat-spinner { display: inline-block; flex-shrink: 0; width: 16px; height: 16px; border: 2px solid #ffd2b9; border-top-color: #ff641a; border-radius: 50%; animation: chat-waiting .8s linear infinite; }
+@keyframes chat-waiting { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .lr-chat-spinner { animation: none; } }
+@media (max-width: 760px) {
+  .app[data-view="ai"] { min-height: 100dvh; padding: 96px 20px 130px; }
+  .app[data-view="ai"] #screen { left: 0; width: 100%; }
+  .app[data-view="ai"] #status { left: 0; width: 100%; }
+  .app[data-view="ai"] .lr-chat-context { font-size: 13px; }
+  .app[data-view="ai"] .lr-chat-log { height: 300px; max-height: 300px; padding: 14px; }
+  .app[data-view="ai"] .chat-bubble { max-width: 90%; padding: 12px 14px; }
+  .app[data-view="ai"] .lr-chat-message p, .app[data-view="ai"] .lr-chat-empty { font-size: 15px; }
+  .app[data-view="ai"] .lr-chat-label { font-size: 16px; }
+  .app[data-view="ai"] .lr-chat textarea { height: 110px; min-height: 110px; max-height: 110px; font-size: 16px; }
+  .app[data-view="ai"] .lr-chat-actions { gap: 8px; }
+  .app[data-view="ai"] .lr-chat button { font-size: 15px; padding: 10px 16px; }
+  .app[data-view="ai"] .lr-chat button.primary { width: auto; min-width: 0; min-height: 48px; font-size: 16px; flex: 1; }
+  .app[data-view="ai"] .lr-chat-proposal, .app[data-view="ai"] .lr-chat-menu, .app[data-view="ai"] .lr-chat-map { font-size: 14px; }
+}

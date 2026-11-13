@@ -1,6 +1,8 @@
 """2단계 메뉴 카탈로그 초기화와 실제 DB 우선 추첨 테스트."""
 
 from pathlib import Path
+from datetime import time
+from app.database import BusinessHours
 import pytest
 
 from sqlalchemy import func, select
@@ -85,16 +87,18 @@ def add_restaurant(
         longitude=longitude,
         address="서울 테스트로 1",
         place_url=f"https://place.map.kakao.com/{restaurant_id}",
-        detail_status=PlaceDetailStatus(menu_status="success", hours_status="pending"),
+        detail_status=PlaceDetailStatus(menu_status="success", hours_status="success"),
     )
     restaurant.menus.append(
         Menu(
             name=menu_name,
             normalized_name=menu_name,
+            menu_catalog_id='bibimbap' if menu_name=='비빔밥' else 'cutlet',
             price=price,
             price_status="known",
         )
     )
+    restaurant.business_hours = [BusinessHours(day_of_week=d, holiday=False, start_time=time(0), end_time=time(0), ends_next_day=True) for d in range(7)]
     session.add(restaurant)
 
 
@@ -113,11 +117,11 @@ def test_seed_is_idempotent_and_aliases_are_unique(tmp_path: Path):
         database.dispose()
 
 
-def test_verified_nearby_menu_has_priority_and_alias_matches(tmp_path: Path):
+def test_verified_nearby_menu_uses_explicit_catalog_link(tmp_path: Path):
     database = database_for(tmp_path)
     try:
         with database.session_factory.begin() as session:
-            # 돈까스 표기도 돈가스 카탈로그 별칭으로 연결된다.
+            # 적재 시 확정한 FK로 연결하며 조회할 때 이름을 추측하지 않는다.
             add_restaurant(
                 session,
                 "near",
@@ -154,7 +158,7 @@ def test_verified_nearby_menu_has_priority_and_alias_matches(tmp_path: Path):
         database.dispose()
 
 
-def test_catalog_fallback_respects_budget_cuisine_and_exclusion(tmp_path: Path):
+def test_empty_database_never_falls_back_to_seed_prices(tmp_path: Path):
     database = database_for(tmp_path)
     try:
         with database.session_factory() as session:
@@ -175,10 +179,7 @@ def test_catalog_fallback_respects_budget_cuisine_and_exclusion(tmp_path: Path):
                 cuisine="중식",
                 excluded_menu_ids={"noodle"},
             )
-        assert [item.id for item in candidates] == ["noodle"]
-        assert candidates[0].source == "catalog"
-        assert candidates[0].price_verified is False
-        assert candidates[0].verified_price is None
+        assert candidates == []
         assert excluded is None
     finally:
         database.dispose()

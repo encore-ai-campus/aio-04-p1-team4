@@ -162,6 +162,10 @@ def menu_candidates(
             if catalog.id in evidence
         ]
 
+    # 실제 식당 데이터가 전혀 없으면 카탈로그 기준 후보도 제공하지 않는다.
+    if not restaurants:
+        return []
+
     # 주변 상세정보가 부족할 때만 기준 가격으로 후보를 좁히며 실제 가격으로 표시하지 않는다.
     return [
         MenuCandidate(

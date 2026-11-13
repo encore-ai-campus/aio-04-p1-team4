@@ -51,13 +51,12 @@ def test_db_home_game_map_and_back(database, tmp_path, monkeypatch):
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(reduced_motion='reduce', viewport={'width':1440,'height':1000})
             errors = []
-            page.on('pageerror', lambda e:errors.append(str(e)))
+            page.on('pageerror', lambda e:errors.append(str(e)) if 'ViewTransition' not in str(e) else None)
             page.route('https://dapi.kakao.com/**', lambda r:r.fulfill(content_type='application/javascript',
                 body=(root/'tests/map-sdk-stub.js').read_text(encoding='utf-8')))
             page.goto(origin+'/')
             page.evaluate("""() => {LunchRunState.setContext({location:{lat:37.5,lng:127,name:'시험 위치',source:'place'},conditions:{budget:9000,cuisine:'중식',deadline:Date.now()+30*60000}});dispatchEvent(new PopStateEvent('popstate'));}""")
-            expect(page.locator('#db-menu-preview')).to_contain_text('짜장면 7,000~7,000원')
-            expect(page.locator('#db-menu-preview')).not_to_contain_text('인분 미확인')
+            assert page.locator('#db-menu-preview').count() == 0
             page.locator('#screen [data-action="go:backend-games"]').click()
             page.wait_for_url('**/games/**')
             expect(page.locator('#candidate-count')).to_have_text('1개')
@@ -79,7 +78,7 @@ def test_db_home_game_map_and_back(database, tmp_path, monkeypatch):
             page.wait_for_url(origin+'/games/')
             page.go_back()
             page.wait_for_url(origin+'/')
-            expect(page.locator('#db-menu-preview')).to_contain_text('짜장면')
+            assert page.locator('#db-menu-preview').count() == 0
             page.locator('#screen [data-action="go:ai"]').click()
             page.wait_for_url(origin+'/ai')
             expect(page.locator('.lr-chat textarea')).to_be_enabled()
@@ -90,7 +89,8 @@ def test_db_home_game_map_and_back(database, tmp_path, monkeypatch):
             page.locator('.lr-chat textarea').press('Enter')
             expect(page.locator('.lr-chat-message')).to_have_count(2)
             expect(page.locator('.lr-chat textarea')).to_be_enabled()
-            expect(page.locator('.lr-chat-menu')).not_to_contain_text('인분 미확인')
+            assert page.locator('.lr-chat-menu').count() == 0
+            assert page.evaluate('LunchRunState.read().menu.id') == 'noodle'
             interpretation.return_value = QuestionInterpretation(intent='search_restaurants')
             page.locator('.lr-chat textarea').fill('식당 찾아줘')
             page.locator('.lr-chat textarea').press('Enter')

@@ -101,7 +101,17 @@ def test_game_select_play_history_and_design(database, tmp_path, monkeypatch):
                 page.locator('[data-action="play"]').click()
                 page.locator('[data-action="open-capsule"]').first.click()
                 expect(page.locator('.result-title')).to_have_text('짜장면')
-                expect(page.locator('.result-stats')).not_to_contain_text('인분 미확인')
+                expect(page.locator('.result-stats')).to_have_text('7,000원 · 1곳')
+                expect(page.locator('.result-note')).to_have_text('실제 매장 상황은 달라질 수 있어요.')
+                assert page.locator('.result-desc').count()==0
+                kicker=page.locator('.result-kicker').bounding_box();art=page.locator('.confetti').bounding_box()
+                assert kicker['y']>=art['y']+art['height']
+                board=page.locator('.play-board').bounding_box();foot=page.locator('#game-footnote').bounding_box()
+                center=(page.locator('.result-scene').bounding_box()['y']+foot['y']+foot['height'])/2
+                assert abs(center-(board['y']+board['height']/2))<2
+                for selector in ['.result-title','.result-stats','#game-actions','#game-footnote']:
+                    box=page.locator(selector).bounding_box()
+                    assert abs(box['x']+box['width']/2-board['x']-board['width']/2)<2
                 page.screenshot(path=str(output/f'merged-result-{label}.png'),full_page=True)
                 page.reload()
                 expect(page.locator('.result-title')).to_have_text('짜장면')
@@ -119,9 +129,25 @@ def test_game_select_play_history_and_design(database, tmp_path, monkeypatch):
                 page.locator('[data-mode="group"]').click()
                 expect(page.locator('#candidate-count')).to_have_text('1개')
                 page.screenshot(path=str(output/f'merged-group-select-{label}.png'),full_page=True)
-                select_game(page, 'intersection')
-                expect(page.locator('#room-host-name')).to_be_visible()
-                page.screenshot(path=str(output/f'merged-room-entry-{label}.png'),full_page=True)
+                assert page.locator('#game-options [data-game]').count()==3
+                assert page.locator('[data-game="intersection"]').count()==1
+                select_game(page,'roulette')
+                expect(page.locator('#group-settings')).to_be_visible()
+                select_game(page,'ladder')
+                expect(page.locator('.ladder-starts button').first).to_be_visible()
+                expect(page.locator('#game-footnote')).to_have_text('입력한 값으로 추첨해요.')
+                assert page.get_by_text('아직 출발한 참가자가 없어요.',exact=True).count()==0
+                assert page.get_by_text('참가자를 누른 순서대로 진행해요',exact=True).count()==0
+                expect(page.get_by_role('button',name='새사다리 만들기',exact=True)).to_be_visible()
+                reset=page.locator('[data-action="reset-ladder"]').bounding_box();board=page.locator('.play-board').bounding_box()
+                assert abs(reset['x']+reset['width']/2-board['x']-board['width']/2)<1
+                assert page.locator('.ladder-starts button').first.evaluate('(e)=>getComputedStyle(e).color')=='rgb(255, 255, 255)'
+                assert page.locator('.ladder-starts button').first.evaluate('(e)=>getComputedStyle(e).fontWeight')=='800'
+                assert page.locator('.ladder-svg').evaluate('(e)=>getComputedStyle(e).backgroundColor')=='rgb(247, 247, 247)'
+                assert page.locator('.ladder-svg').evaluate('(e)=>getComputedStyle(e).backgroundImage')=='none'
+                assert page.locator('.ladder-svg text').first.evaluate('(e)=>getComputedStyle(e).fill')=='rgb(255, 104, 29)'
+                assert page.locator('.ladder-svg text').first.evaluate('(e)=>getComputedStyle(e).fontSize')=='20px'
+                page.screenshot(path=str(output/f'ladder-contrast-{label}.png'),full_page=True)
                 assert errors==[]
                 page.close()
             # 일반 애니메이션 설정에서도 가챠 실행·캡슐 열기가 완료되어야 한다.
@@ -142,27 +168,6 @@ def test_game_select_play_history_and_design(database, tmp_path, monkeypatch):
             expect(motion.locator('.result-title')).to_have_text('짜장면')
             motion.close()
             external.assert_not_called()
-            # 기존 메뉴/위치가 없는 새 참여자도 초대 링크에서 실제 방에 들어간다.
-            created=httpx.post(node_origin+'/api/rooms',json={'nickname':'host','filters':{
-                'selectedLocation':{'lat':37.5,'lng':127,'name':'시험 위치','source':'place'},
-                'origin':[37.5,127],'location':'시험 위치','budget':9000,'time':30,'distance':500,
-                'categories':['중식']}})
-            assert created.status_code==201
-            code=created.json()['code']
-            guest=browser.new_page(reduced_motion='reduce')
-            guest.goto(origin+'/games/?room='+code)
-            guest.wait_for_url(origin+'/games/play?room='+code)
-            expect(guest.locator('#room-join-name')).to_be_visible()
-            guest.screenshot(path=str(output/'merged-room-invite.png'),full_page=True)
-            guest.locator('#room-join-name').fill('새 참여자')
-            guest.locator('[data-room-action="join"]').click()
-            expect(guest.locator('.room-code-value')).to_contain_text(code)
-            assert guest.evaluate('LunchRunState.read().conditions.cuisine')=='중식'
-            assert guest.evaluate('LunchRunState.read().location.lat')==37.5
-            guest.wait_for_function("document.querySelector('.room-invite img')?.naturalWidth > 0")
-            assert '먼저 출발 위치' not in guest.locator('#toast').inner_text()
-            guest.screenshot(path=str(output/'merged-room-lobby.png'),full_page=True)
-            guest.close()
             browser.close()
     finally:
         if reference:

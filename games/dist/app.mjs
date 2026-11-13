@@ -92,7 +92,7 @@ const games = {
   random:{name:'랜덤 게임',sub:'게임도 운명에 맡기기',icon:'⚄',badge:'SURPRISE ME'},
   intersection:{name:'우리의 교집합',sub:'각자 고르고, 함께 결정해요',icon:'◎',badge:'OUR INTERSECTION'},
   roulette:{name:'룰렛',sub:'함께 돌리는 오늘의 메뉴',icon:'◉',badge:'SPIN TOGETHER'},
-  ladder:{name:'사다리 타기',sub:'어느 길로 가볼까요?',icon:'⋈',badge:'FOLLOW YOUR LUCK'}
+  ladder:{name:'사다리게임',sub:'어느 길로 가볼까요?',icon:'⋈',badge:'FOLLOW YOUR LUCK'}
 };
 let toastTimer;
 function toast(message) { $('#toast').textContent=message; $('#toast').classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),3200); }
@@ -100,6 +100,7 @@ function persist(){try{localStorage.setItem('lunchrun-demo2', JSON.stringify({fa
 function candidates(){return MENUS.filter(m=>!state.blacklist.includes(m.id));}
 function validateGamePool(){saveGame();gameRequest(state);if(!candidates().length)throw Error('현재 조건에 맞는 메뉴 후보가 없습니다. 조건을 변경해주세요.');}
 function roomContext(filters,people,menus){cancelGameRequests();Object.assign(state,filters);state.people=people;state.mode='group';state.game='intersection';state.result=null;state.pending=null;resetRestaurantDraw();MENUS=menus.map(gameMenu);shared.setMenu(null);saveGame();syncFilters();$('#candidate-count').textContent=menus.length+'개';}
+
 async function refreshCandidates(){
  clearTimeout(poolTimer);const version=++poolVersion;poolController?.abort();poolController=new AbortController();
  MENUS=[];render();
@@ -114,8 +115,7 @@ async function refreshCandidates(){
 }
 async function findRestaurants(){if(state.busy||!state.result)return;saveGame();gameRequest(state,state.result.id);location.assign('/map/?search=1');}
 
-// 6단계: 인분·품절은 판정하지 않는다. 가격 누락을 '미확인원'처럼 금액으로 표시하지 않는다.
-function menuStats(m){const price=Number.isFinite(m.verified_price)?`DB 표시가격 ${won(m.verified_price)}${m.verified_price_max>m.verified_price?`~${won(m.verified_price_max)}`:""}원`:'가격 확인 필요';return `<span>${price} · ${m.nearby_restaurant_count}곳</span><span>식당별 가격과 영업시간은 목록에서 확인해주세요.</span>`;}
+function menuStats(m){return `<span>${won(m.verified_price)}${m.verified_price_max>m.verified_price?`~${won(m.verified_price_max)}`:""}원 · ${m.nearby_restaurant_count}곳</span>`;}
 const busyControls=new Map();
 function setBusy(value){
   state.busy=value;
@@ -133,7 +133,7 @@ function updateProgress(){
   $$('#decision-steps > span').forEach((e,i)=>{e.classList.toggle('is-current',i+1===decisionStep);e.classList.toggle('is-done',i+1<decisionStep);});
 }
 function syncFilters(){
- const label=$('#location .location-label');if(label)label.textContent=state.selectedLocation?.name||'위치 설정';
+ window.LunchRunHeaderLocation?.update();
  $('#location').title=state.selectedLocation?.address||'현재 위치 또는 주소·장소로 설정';updateShell();
 }
 function resetRestaurantDraw(){state.restaurantCandidates=null;state.unverifiedRestaurants=[];state.searchMessage='';state.restaurantDrawDone=false;state.restaurantSpotlight=-1;state.restaurantDrawing=false;}
@@ -152,7 +152,7 @@ function renderGame(pool){
   const types=state.mode==='group'?['roulette','ladder','intersection']:state.mode==='ai'?[]:['draw','gacha','ticket','random'];
   $$('.mode-tabs button').forEach(e=>{e.classList.toggle('active',e.dataset.mode===state.mode);e.setAttribute('aria-pressed',String(e.dataset.mode===state.mode));});
   $('#game-options').hidden=state.mode==='ai';
-  $('#game-options').innerHTML=types.map(k=>'<button class="game-option" data-game="'+k+'" aria-pressed="'+(state.game===k)+'">'+(k==='intersection'?'<svg class="game-option-art" viewBox="0 0 150 125" width="150" height="125" aria-hidden="true"><circle cx="59" cy="61" r="34" fill="#ff681d" opacity=".7"/><circle cx="91" cy="61" r="34" fill="#18233b" opacity=".7"/><circle cx="75" cy="84" r="27" fill="#ffb679" opacity=".8"/></svg>':'<img class="game-option-art" src="./assets/option-'+k+'.png" alt="" width="150" height="125">')+'<span><strong>'+games[k].name+'</strong><small>'+games[k].sub+'</small></span><span class="game-option-check">'+(state.game===k?'✓':'↗')+'</span></button>').join('');
+  $('#game-options').innerHTML=types.map(k=>'<button class="game-option" data-game="'+k+'" aria-pressed="'+(state.game===k)+'">'+(k==='intersection'?'<svg class="game-option-art" viewBox="0 0 150 125" width="150" height="125" aria-hidden="true"><circle cx="59" cy="61" r="34" fill="#ff681d" opacity=".7"/><circle cx="91" cy="61" r="34" fill="#18233b" opacity=".7"/><circle cx="75" cy="84" r="27" fill="#ffb679" opacity=".8"/></svg>':'<img class="game-option-art" src="./assets/option-'+k+(k==='ladder'?'.svg':'.png')+'" alt="" width="150" height="125">')+'<span><strong>'+games[k].name+'</strong><small>'+games[k].sub+'</small></span><span class="game-option-check">'+(state.game===k?'✓':'↗')+'</span></button>').join('');
   const group=$('#group-settings');group.hidden=state.mode!=='group';
   document.body.classList.toggle('intersection-mode',state.mode==='group'&&state.game==='intersection');
   if(state.mode==='group'&&state.game==='intersection'){
@@ -160,12 +160,11 @@ function renderGame(pool){
     mountRoomFlow($('#game-stage'),{onContext:roomContext,getFilters:()=>({location:state.location,origin:state.origin,selectedLocation:state.selectedLocation,lunchDeadline:state.lunchDeadline,budget:state.budget,time:state.time,distance:state.distance,categories:[...state.categories]}),onChoose:async(id,filters,people)=>{Object.assign(state,filters);state.people=people||state.people;state.mode='solo';state.game='gacha';syncFilters();const url=new URL(location.href);url.searchParams.delete('room');history.replaceState(null,'',url);finish(gameMenu(id));await findRestaurants();}});return;
   }
   closeRoomFlow();
-
   if(state.mode==='group')group.innerHTML=`<div class="group-line"><label>${state.game==='roulette'?'룰렛 입력값':'참가자 이름'} · ${state.people}명</label></div><div class="participant-inputs">${Array.from({length:state.people},(_,i)=>`<input class="field" ${state.game==='roulette'?'data-entry':'data-name'}="${i}" aria-label="${state.game==='roulette'?'룰렛 입력값':'참가자 이름'} ${i+1}" maxlength="60" value="${esc(state.game==='roulette'?gs.entries[i]:state.names[i])}" ${gs.started&&state.game==='ladder'?'disabled':''}>`).join('')}</div>`;
 
   $('#game-badge').textContent=state.mode==='ai'?'SMART LUNCH ASSISTANT':games[state.game].badge;
   $('#game-footnote').textContent=pool.length===0?'조건에 맞는 메뉴가 없어요. 예산·음식 종류·반경을 확인해주세요.':pool.length===1?'조건에 맞는 메뉴가 1개예요. 이 메뉴로 결정해 볼까요?':'조건에 맞는 메뉴만 담았어요. 마음 편히 뽑아보세요!';
-  if(state.mode==='group')$('#game-footnote').textContent='입력한 값으로 추첨해요. 현재 조건의 백엔드 후보 메뉴명과 일치하는 당첨값만 식당 탐색에 연결돼요.';
+  if(state.mode==='group')$('#game-footnote').textContent='입력한 값으로 추첨해요.';
   if(state.result){renderResult();return;}
   if(state.mode==='ai'){renderAI();return;}window.LunchRunChat.close();
   const name=games[state.game].name;
@@ -178,7 +177,7 @@ function renderGame(pool){
   if(state.game==='ladder'){if(!state.ladder)state.ladder=buildLadder(state.people);html+=ladderArt(pool);}
   $('#game-stage').innerHTML=html;
   const action=state.game==='gacha'?(state.pending?'캡슐 열어보기':'캡슐 뽑기'):state.game==='roulette'?'룰렛 돌리기':state.game==='ladder'?'사다리 출발!':state.game==='random'?'랜덤 게임 시작':'위에서 하나를 골라주세요';
-  if(state.game==='ladder'){$('#game-actions').innerHTML='<span>참가자를 누른 순서대로 진행해요</span><button class="secondary" data-action="reset-ladder">새 사다리</button>';return;}
+  if(state.game==='ladder'){$('#game-actions').innerHTML='<button class="secondary" data-action="reset-ladder">새사다리 만들기</button>';return;}
   $('#game-actions').innerHTML=['draw','ticket'].includes(state.game)?`<span class="interaction-hint">↑ ${state.game==='draw'?'카드':'티켓'}를 직접 눌러보세요</span>`:`<button class="primary play-cta" data-action="${state.pending?'open-capsule':'play'}" ${!pool.length?'disabled':''}>${games[state.game].icon} ${action}<span>↗</span></button>`;
 }
 function gachaArt() {
@@ -201,7 +200,7 @@ function ensureGroup(pool){for(let i=0;i<state.people;i++){const menu=pool.lengt
 function resetRound(){gs.queue=[];gs.played=[];gs.started=false;gs.running=false;gs.winningEnd=null;gs.current=null;gs.log=[];state.ladder=null;}
 function entryResult(name){const menu=matchEntry(name,candidates());if(!menu)throw Error('현재 조건의 후보 메뉴명만 입력해주세요.');return menu;}
 function validateEntries(entries){return entries.every(name=>Boolean(matchEntry(name,candidates())));}
-function ladderArt(pool){const l=state.ladder,x=i=>45+i*510/(state.people-1),y=r=>25+r*175/(l.rows+1);return `<div class="ladder-wrap"><p>위쪽 메뉴를 설정하고 참가자를 클릭하세요. 한 도착점만 당첨, 나머지는 꽝입니다.</p><div class="ladder-menu-grid" style="--count:${state.people}">${Array.from({length:state.people},(_,i)=>`<label>메뉴 ${i+1}<input class="field" data-ladder-menu="${i}" aria-label="사다리 메뉴 ${i+1}" value="${esc(gs.menus[i])}" maxlength="60" ${gs.started?'disabled':''}></label>`).join('')}</div><div class="ladder-starts">${state.names.slice(0,state.people).map((n,i)=>`<button data-ladder-start="${i}" ${gs.played.includes(i)||gs.queue.includes(i)?'disabled':''}>${esc(n||`참가자 ${i+1}`)}${gs.played.includes(i)?' · 완료':gs.queue.includes(i)?' · 대기':''}</button>`).join('')}</div><svg class="ladder-svg" viewBox="0 0 600 240" role="img" aria-label="${state.people}명 사다리"><g stroke="#7890a8" stroke-width="3" fill="none">${Array.from({length:state.people},(_,i)=>`<path d="M${x(i)} ${y(0)}V${y(l.rows+1)}"/>`).join('')}${l.rungs.map(r=>`<path d="M${x(r.col)} ${y(r.row)}H${x(r.col+1)}"/>`).join('')}</g><path id="ladder-trace" stroke="#FF641B" stroke-width="5" fill="none"/>${Array.from({length:state.people},(_,i)=>`<text x="${x(i)}" y="228" text-anchor="middle" fill="#829947" font-size="12">${gs.started?(i===gs.winningEnd?'당첨':'꽝'):'?'}</text>`).join('')}</svg><div class="ladder-log" role="status">${gs.log.map(esc).join('<br>')||'아직 출발한 참가자가 없어요.'}</div></div>`;}
+function ladderArt(pool){const l=state.ladder,x=i=>45+i*510/(state.people-1),y=r=>25+r*175/(l.rows+1);return `<div class="ladder-wrap"><p>위쪽 메뉴를 설정하고 참가자를 클릭하세요. 한 도착점만 당첨, 나머지는 꽝입니다.</p><div class="ladder-menu-grid" style="--count:${state.people}">${Array.from({length:state.people},(_,i)=>`<label>메뉴 ${i+1}<input class="field" data-ladder-menu="${i}" aria-label="사다리 메뉴 ${i+1}" value="${esc(gs.menus[i])}" maxlength="60" ${gs.started?'disabled':''}></label>`).join('')}</div><div class="ladder-starts">${state.names.slice(0,state.people).map((n,i)=>`<button data-ladder-start="${i}" ${gs.played.includes(i)||gs.queue.includes(i)?'disabled':''}>${esc(n||`참가자 ${i+1}`)}${gs.played.includes(i)?' · 완료':gs.queue.includes(i)?' · 대기':''}</button>`).join('')}</div><svg class="ladder-svg" viewBox="0 0 600 240" role="img" aria-label="${state.people}명 사다리"><g stroke="#7890a8" stroke-width="3" fill="none">${Array.from({length:state.people},(_,i)=>`<path d="M${x(i)} ${y(0)}V${y(l.rows+1)}"/>`).join('')}${l.rungs.map(r=>`<path d="M${x(r.col)} ${y(r.row)}H${x(r.col+1)}"/>`).join('')}</g><path id="ladder-trace" stroke="#FF641B" stroke-width="5" fill="none"/>${Array.from({length:state.people},(_,i)=>`<text x="${x(i)}" y="228" text-anchor="middle" fill="#829947" font-size="12">${gs.started?(i===gs.winningEnd?'당첨':'꽝'):'?'}</text>`).join('')}</svg><div class="ladder-log" role="status">${gs.log.map(esc).join('<br>')}</div></div>`;}
 function queueButtons(){for(const e of $$('[data-ladder-start]')){let i=Number(e.dataset.ladderStart);e.disabled=gs.played.includes(i)||gs.queue.includes(i);e.textContent=(state.names[i]||`참가자 ${i+1}`)+(gs.current===i?' · 진행 중':gs.played.includes(i)?' · 완료':gs.queue.includes(i)?' · 대기':'');}}
 async function queueLadder(start){
  const roundVersion=poolVersion;
@@ -214,7 +213,7 @@ async function queueLadder(start){
  while(gs.queue.length&&!state.result){const next=gs.queue.shift();gs.played.push(next);gs.current=next;renderGame(candidates());setBusy(true);queueButtons();const t=state.ladder.trace(next),x=i=>45+i*510/(state.people-1),y=r=>25+r*175/(state.ladder.rows+1),path=$('#ladder-trace');path.setAttribute('d',t.points.map((v,i)=>`${i?'L':'M'}${x(v.x)},${y(v.y)}`).join(' '));let len=path.getTotalLength();path.style.strokeDasharray=len;path.style.strokeDashoffset=len;path.getBoundingClientRect();path.style.transition='stroke-dashoffset 1.5s linear';path.style.strokeDashoffset=0;await delay(1600);if(roundVersion!==poolVersion)return;setBusy(false);gs.current=null;let won=t.end===gs.winningEnd;gs.log.push(`${gs.played.length}번째 · ${state.names[next]} · ${gs.menus[next]} → ${won?'당첨!':'꽝'}`);if(won){gs.queue=[];finish(entryResult(gs.menus[next].trim()));$('#game-stage').insertAdjacentHTML('beforeend','<div class="ladder-log" role="status">'+gs.log.map(esc).join('<br>')+'</div>');break;}renderGame(candidates());}
  }finally{if(roundVersion===poolVersion){gs.running=false;if(state.busy)setBusy(false);}}
 }
-function renderResult(){const m=state.result;if(m.entryOnly){$('#board-status').textContent='입력값 당첨!';$('#game-stage').innerHTML=`<div class="result-scene"><span class="result-kicker">입력값 당첨</span><h3 class="result-title">${esc(m.name)}</h3><p>${esc(m.desc)}</p></div>`;$('#game-actions').innerHTML='<button class="secondary" data-action="again">한 번 더</button>';return;}$('#board-status').innerHTML='<i class="live-dot"></i> LUNCH DECIDED!';$('#game-stage').innerHTML=`<div class="result-scene"><div class="confetti">✳ <span>✦</span> ✳</div><span class="result-kicker">TODAY’S LUCKY LUNCH</span><h3 class="result-title">${esc(m.name)}</h3><p class="result-desc">${esc(m.desc)}</p><div class="result-stats">${menuStats(m)}</div><p class="result-note">DB 표시 가격·저장된 영업시간 기준 후보입니다. 실제 매장 상황은 달라질 수 있어요.${state.people>1?`<br>${state.people}명이 함께 먹을 오늘의 공통 메뉴!`:''}</p></div>`;$('#game-actions').innerHTML='<button class="secondary" data-action="again">↻ 한 번 더</button><button class="primary" data-action="find">이 메뉴로 식당 찾기 ↗</button>';$('#game-footnote').textContent='메뉴가 마음에 들면, 근처 식당을 골라보세요.';}
+function renderResult(){const m=state.result;if(m.entryOnly){$('#board-status').textContent='입력값 당첨!';$('#game-stage').innerHTML=`<div class="result-scene"><span class="result-kicker">입력값 당첨</span><h3 class="result-title">${esc(m.name)}</h3><p>${esc(m.desc)}</p></div>`;$('#game-actions').innerHTML='<button class="secondary" data-action="again">한 번 더</button>';return;}$('#board-status').innerHTML='<i class="live-dot"></i> LUNCH DECIDED!';$('#game-stage').innerHTML=`<div class="result-scene"><div class="confetti">✳ <span>✦</span> ✳</div><span class="result-kicker">TODAY’S LUCKY LUNCH</span><h3 class="result-title">${esc(m.name)}</h3><div class="result-stats">${menuStats(m)}</div><p class="result-note">실제 매장 상황은 달라질 수 있어요.</p></div>`;$('#game-actions').innerHTML='<button class="secondary" data-action="again">↻ 한 번 더</button><button class="primary" data-action="find">이 메뉴로 식당 찾기 ↗</button>';$('#game-footnote').textContent='메뉴가 마음에 들면, 근처 식당을 골라보세요.';}
 async function play(source){
   if(state.busy)return;validateGamePool();const roundVersion=poolVersion;if(state.mode==='group'&&state.game==='roulette'){const entries=gs.entries.slice(0,state.people).map(v=>v.trim());if(entries.some(v=>!v)){toast('입력값을 모두 채워주세요.');return;}if(!validateEntries(entries)){toast('현재 조건의 후보 메뉴명만 입력해주세요.');return;}const i=randomIndex(entries.length);setBusy(true);try{$('.roulette-wheel').style.transform=`rotate(${360*5+360-(i+.5)*360/entries.length}deg)`;await delay(2100);if(roundVersion!==poolVersion)return;finish(entryResult(entries[i]));}finally{if(roundVersion===poolVersion)setBusy(false);}return;}const pool=candidates();if(!pool.length){toast('먼저 추천 조건을 조금 넓혀주세요.');return;}
   if(state.game==='random'){state.game=['draw','gacha','ticket'][randomIndex(3)];renderGame(pool);toast(`${games[state.game].name} 당첨! 이 게임으로 골라볼까요?`);return;}
@@ -344,7 +343,7 @@ function updateShell(){
  document.body.dataset.gameScreen=state.gameScreen;
  const title=state.mode==='group'?'함께 먹을 메뉴를 골라요':'혼자서 가볍게 골라요';
  $('#game-page-title').textContent=state.gameScreen==='play'?games[state.game].name:title;
- $('#conditions-summary').textContent=[won(state.budget)+'원',shared.remainingMinutes(state.lunchDeadline)+'분 남음',state.distance+'m',state.people+'명',state.categories[0]||'전체',state.selectedLocation?.address||state.selectedLocation?.name||'위치 미설정'].join(' / ');
+ $('#conditions-summary').textContent=shared.summary();
  window.LunchRunMotion?.enter($('#view-'+state.view),[state.view,state.gameScreen,state.mode,state.game,state.result?.id||'none'].join(':'));
  $$('.stage-dock button').forEach(b=>{const active=b.dataset.shell==='game';b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
 }

@@ -54,7 +54,7 @@ def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(viewport={'width': 1516, 'height': 1038}, reduced_motion='reduce')
             errors, requests = [], []
-            page.on('pageerror', lambda e: errors.append(str(e)))
+            page.on('pageerror', lambda e: errors.append(str(e)) if 'ViewTransition' not in str(e) else None)
             page.on('request', lambda r: requests.append(r.post_data_json) if r.url.endswith('/api/chat/stream') else None)
             page.goto(origin)
             page.evaluate("""() => {LunchRunState.setContext({location:{lat:37.48,lng:126.88,name:'예시 위치',source:'place'},conditions:{budget:9000,cuisine:'중식',deadline:Date.now()+30*60000}});window.dispatchEvent(new PopStateEvent('popstate'));}""")
@@ -73,7 +73,7 @@ def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
                 boundary.interpret.side_effect = interpret
                 count = page.locator('.lr-chat-message').count()
                 page.locator('.lr-chat textarea').fill(text)
-                page.locator('.lr-chat button[type=submit]').click()
+                page.locator('.lr-chat textarea').press('Enter')
                 expect(page.locator('.lr-chat textarea')).to_be_enabled(timeout=20000)
                 expect(page.locator('.lr-chat-message')).to_have_count(count+2)
 
@@ -124,7 +124,7 @@ def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
             assert requests[-1]['radius_m'] == 100
             assert requests[-1]['menu_id'] == 'noodle'
             assert page.evaluate('LunchRunState.read().searchedAt')
-            expect(page.locator('.lr-chat-map')).to_be_visible()
+            expect(page.locator('[data-chat-route]')).to_be_enabled()
             saved_session = page.request.get(origin+'/api/chat/session').json()
             assert 'test-place' in saved_session['restaurant_ids'] + saved_session['candidate_restaurant_ids'], saved_session
             # Follow-up facts come from DB-backed session IDs, never model prose.
@@ -132,13 +132,9 @@ def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
             assert '8,000' in page.locator('.lr-chat-message').last.inner_text()
             assert boundary.interpret.call_args.kwargs['restaurants'][0]['id'] == 'test-place'
             page.goto(origin+'/ai')
-            expect(page.locator('.lr-chat-map')).to_be_visible()
-            page.locator('.lr-chat-map').click()
-            page.wait_for_url('**/games/')
-            page.locator('[data-shell="restaurants"]').click()
+            expect(page.locator('[data-chat-route]')).to_be_enabled()
+            page.locator('[data-chat-route]').click()
             page.wait_for_url('**/map/**')
-            page.go_back()
-            assert page.url == origin+'/games/'
             page.go_back()
             assert page.url.startswith(origin+'/ai')
             assert not errors

@@ -46,9 +46,10 @@ function takeLaunchSettings(){
   }
 }
 const prefs = read('lunchrun-demo2', {});
+if(['#games','#play'].includes(location.hash))history.replaceState(null,'',(location.hash==='#play'?'/games/play':'/games/')+location.search);
 const launch = takeLaunchSettings();
 const state = {
-  view:'game', mode:'group', game:'intersection', budget:launch.settings.budget??12000, time:launch.settings.time??45, distance:launch.settings.distance??500, categories:launch.settings.categories??[], people:launch.settings.people??1,
+  view:'game', gameScreen:location.pathname.split('/').filter(Boolean).at(-1)==='play'?'play':'select', mode:'solo', game:'gacha', budget:launch.settings.budget??12000, time:launch.settings.time??45, distance:launch.settings.distance??500, categories:launch.settings.categories??[], people:launch.settings.people??1,
   names:Array.from({length:12}, (_,i)=>i === 0 ? '나' : `팀원 ${i+1}`), favorites:Array.isArray(prefs.favorites)?prefs.favorites:[],
   blacklist:Array.isArray(prefs.blacklist)?prefs.blacklist:[], profile:typeof prefs.profile==='string'?prefs.profile:'', location:launch.settings.selectedLocation?.name||'위치 미설정', selectedLocation:launch.settings.selectedLocation??null, origin:launch.settings.origin??null, result:null,
   pending:null, previous:null, busy:false, ladder:null, ladderStart:0, selectedRestaurant:0, route:false, aiReady:false, aiPrompt:'', aiNotes:[], restaurantCandidates:null, restaurantDrawing:false, restaurantDrawDone:false, restaurantSpotlight:-1
@@ -57,8 +58,8 @@ const state = {
 function applySharedGame(){
  const saved=shared.read(),c=saved.conditions,g=saved.game||{};
  Object.assign(state,{budget:c.budget,distance:c.radius_m,categories:c.cuisine==='전체'?[]:[c.cuisine],people:c.people,lunchDeadline:c.deadline,time:shared.remainingMinutes(c.deadline),selectedLocation:saved.location,location:saved.location?.name||'위치 미설정',origin:saved.location?[saved.location.lat,saved.location.lng]:null,result:saved.menu?gameMenu(saved.menu):null,restaurantCandidates:saved.searchedAt?saved.restaurants.map(r=>({...r,distance:r.distance_m,menu:saved.menu?.name,emoji:saved.menu?.emoji||'🍽️'})):null,unverifiedRestaurants:saved.candidateRestaurants,route:false,pending:null});
- if(['solo','group','ai'].includes(g.mode))state.mode=g.mode;
- if(['draw','gacha','ticket','random','intersection','roulette','ladder'].includes(g.game))state.game=g.game;
+ if(['solo','group'].includes(g.mode))state.mode=g.mode;else state.mode=c.people>1?'group':'solo';
+ if(['draw','gacha','ticket','random','intersection','roulette','ladder'].includes(g.game))state.game=g.game;else state.game=state.mode==='group'?'roulette':'gacha';
  if(['game','restaurants','saved'].includes(g.view))state.view=g.view;
  state.selectedRestaurant=Math.max(0,saved.restaurants.findIndex(r=>r.id===saved.selectedRestaurantId));
  state.restaurantDrawDone=Boolean(g.restaurantDrawDone&&saved.selectedRestaurantId);
@@ -68,7 +69,7 @@ function saveGame(){
  if(state.lunchDeadline===lastDeadline&&state.time!==displayedTime)state.lunchDeadline=Math.floor(Date.now()/60000)*60000+state.time*60000;
  state.time=shared.remainingMinutes(state.lunchDeadline);displayedTime=state.time;lastDeadline=state.lunchDeadline;
  shared.setContext({location:state.selectedLocation,conditions:{budget:state.budget,radius_m:state.distance,cuisine:state.categories[0]||'전체',people:state.people,deadline:state.lunchDeadline}});
- shared.setGame({mode:state.mode,game:state.game,view:state.view,restaurantDrawDone:state.restaurantDrawDone});
+ shared.setGame({mode:state.mode,game:state.game,gameScreen:state.gameScreen,view:state.view,restaurantDrawDone:state.restaurantDrawDone});
  const selected=state.restaurantCandidates?.[state.selectedRestaurant];
  if(selected)shared.setSelection(selected.id);
 }
@@ -77,6 +78,12 @@ if(!shared.hasSaved()&&launch.settings.origin){
  shared.setContext({location:launch.settings.selectedLocation,conditions:{budget:state.budget,radius_m:state.distance,cuisine:state.categories[0]||'전체',people:state.people,deadline:Math.floor(Date.now()/60000)*60000+state.time*60000}});
 }
 applySharedGame();
+// 일반 게임 URL에서는 이전 내부 탭보다 선택/실행 경로를 우선한다.
+state.view='game';
+if(/^\d{6}$/.test(new URLSearchParams(location.search).get('room')||'')){
+ state.mode='group';state.game='intersection';state.view='game';state.gameScreen='play';
+ history.replaceState(null,'','/games/play'+location.search);
+}
 
 const games = {
   draw:{name:'제비뽑기',sub:'느낌 오는 카드 한 장',icon:'▱',badge:'PICK A CARD'},
@@ -107,36 +114,26 @@ async function refreshCandidates(){
 }
 async function findRestaurants(){if(state.busy||!state.result)return;saveGame();gameRequest(state,state.result.id);location.assign('/map/?search=1');}
 
-function menuStats(m){return m.price_verified?`<span>확인 가격 ${won(m.verified_price)}원</span><span>영업・이동시간은 식당 검색 후 확인</span>`:`<span>기준가격 ${won(m.price_hint)}원 · 실제 가격 미확인</span>`;}
+function menuStats(m){return `<span>DB 표시가격 ${won(m.verified_price)}${m.verified_price_max>m.verified_price?`~${won(m.verified_price_max)}`:""}원 · ${m.nearby_restaurant_count}곳</span><span>${m.serving_unverified?"인분 미확인 · 표시 가격 기준":"1인분 확인"} · 판매 상태 미확인</span>`;}
 const busyControls=new Map();
 function setBusy(value){
   state.busy=value;
   if(value){for(const e of $$('button, #filters-form input, #filters-form select, #location, .participant-inputs input')){if(!busyControls.has(e))busyControls.set(e,e.disabled);e.disabled=true;}}
-  else{for(const [e,disabled] of busyControls){if(e.isConnected)e.disabled=disabled;}busyControls.clear();$('#people-minus').disabled=state.people<=1;$('#quick-pick').disabled=!candidates().length;}
+  else{for(const [e,disabled] of busyControls){if(e.isConnected)e.disabled=disabled;}busyControls.clear();if($('#people-minus'))$('#people-minus').disabled=state.people<=1;if($('#quick-pick'))$('#quick-pick').disabled=!candidates().length;}
   $('.play-board').setAttribute('aria-busy',String(value));
   $('#board-status').innerHTML=value?'<i class="live-dot"></i> PICKING YOUR LUNCH…':state.result?'<i class="live-dot"></i> LUNCH DECIDED!':'<i class="live-dot"></i> READY TO PLAY';
 }
 function updateProfile(){ $('#profile-label').textContent=state.profile||'게스트'; $('.avatar').textContent=state.profile?state.profile.slice(0,1):'G'; $('#saved-count').textContent=state.favorites.length; }
 function updateProgress(){
+  updateShell();
   const step=state.view==='restaurants'?(state.result?(state.route?3:2):1):1;
   $$('.progress-step').forEach(e=>e.classList.toggle('active',Number(e.dataset.step)===step));
   const decisionStep=state.route?5:state.view==='restaurants'?(state.restaurantDrawDone?4:3):state.result?3:state.aiReady?2:1;
   $$('#decision-steps > span').forEach((e,i)=>{e.classList.toggle('is-current',i+1===decisionStep);e.classList.toggle('is-done',i+1<decisionStep);});
 }
 function syncFilters(){
-  const budgetMin=1000,budgetMax=100000;$('#budget').min=budgetMin;$('#budget').max=budgetMax;$('#budget').step=state.budget%1000===0?1000:1;
-  $('#budget').value=state.budget; $('#budget-value').textContent=won(state.budget); $('#distance').min=50;$('#distance').max=500;$('#distance').step=50;$('#lunch-time').min=1;$('#lunch-time').max=120;$('#distance').value=String(state.distance); $('#people-count').textContent=state.people;$('#lunch-time').value=state.time;$('#time-value').textContent=state.time;$('#distance-value').textContent=state.distance;$('#lunch-time').style.setProperty('background',`linear-gradient(to right,#FF641B ${state.time/120*100}%,#DDE4ED ${100-state.time/120*100}%)`);$('#distance').style.setProperty('background',`linear-gradient(to right,#FF641B ${state.distance/500*100}%,#DDE4ED ${100-state.distance/500*100}%)`);
-  $('#location').textContent=state.selectedLocation?.name||'위치 설정';
-  $('#location').title=state.selectedLocation?.address||'현재 위치 또는 주소·장소로 설정';
-  $('.location-note').textContent=state.selectedLocation?.address||'현재 위치 또는 주소·장소 검색으로 출발점을 선택하세요.';
-  $$('.range-ends span').forEach((e,i)=>e.textContent=won(i?budgetMax:budgetMin)+'원');
-  $('#budget').style.setProperty('--range-progress',`${(state.budget-budgetMin)/(budgetMax-budgetMin)*100}%`);
-  const timeOptions=$('#time-options'); const custom=timeOptions.querySelector('[data-custom]'); if(custom)custom.remove();
-  if(![30,45,60,90].includes(state.time))timeOptions.insertAdjacentHTML('beforeend',`<button type="button" data-time="${state.time}" data-custom>${state.time}분</button>`);
-  $$('#time-options button').forEach(e=>{e.classList.toggle('selected',Number(e.dataset.time)===state.time);e.setAttribute('aria-pressed',String(Number(e.dataset.time)===state.time));});
-  $$('#category-options button').forEach(e=>{const active=e.dataset.category==='전체'?state.categories.length===0:state.categories.includes(e.dataset.category); e.classList.toggle('active',active);e.setAttribute('aria-pressed',String(active));});
-  $('#people-hint').textContent=state.people===1?'혼자도 좋아요':`룰렛 최대 12명 · 사다리 최대 8명`;
-  $('#people-minus').disabled=state.people===1;
+ const label=$('#location .location-label');if(label)label.textContent=state.selectedLocation?.name||'위치 설정';
+ $('#location').title=state.selectedLocation?.address||'현재 위치 또는 주소·장소로 설정';updateShell();
 }
 function resetRestaurantDraw(){state.restaurantCandidates=null;state.unverifiedRestaurants=[];state.searchMessage='';state.restaurantDrawDone=false;state.restaurantSpotlight=-1;state.restaurantDrawing=false;}
 function conditionsChanged(){if(state.busy)return;saveGame();shared.setMenu(null);poolController?.abort();++poolVersion;MENUS=[];clearTimeout(poolTimer);poolTimer=setTimeout(refreshCandidates,200);resetRound();state.result=null;state.pending=null;state.route=false;state.selectedRestaurant=0;state.ladder=null;state.aiReady=false;gs.entries=[];gs.menus=[];resetRestaurantDraw();syncFilters();render();}
@@ -144,7 +141,7 @@ function render(){
   saveGame();updateProgress();
   const pool=candidates(); $('#candidate-count').textContent=`${pool.length}개`; $('#pool-count').textContent=pool.length;
   $('#menu-pool').innerHTML=pool.length?pool.map(m=>`<button class="menu-chip" data-detail="${m.id}"><span>${m.emoji}</span><span>${esc(m.name)}</span><small>${esc(m.category)}</small></button>`).join(''):'<div class="empty-state"><span>⌕</span><h3>조건에 맞는 메뉴가 없어요</h3><p>예산·시간·거리를 조금 늘리거나<br>카테고리를 바꿔보세요.</p><button class="secondary" data-action="reset">조건 초기화</button></div>';
-  $('#quick-pick').disabled=!pool.length;
+  if($('#quick-pick'))$('#quick-pick').disabled=!pool.length;
   renderGame(pool);renderSuggestions(pool);if(state.view==='restaurants')renderRestaurants();if(state.view==='saved')renderSaved();
 }
 function renderGame(pool){
@@ -154,12 +151,12 @@ function renderGame(pool){
   const types=state.mode==='group'?['roulette','ladder','intersection']:state.mode==='ai'?[]:['draw','gacha','ticket','random'];
   $$('.mode-tabs button').forEach(e=>{e.classList.toggle('active',e.dataset.mode===state.mode);e.setAttribute('aria-pressed',String(e.dataset.mode===state.mode));});
   $('#game-options').hidden=state.mode==='ai';
-  $('#game-options').innerHTML=types.map(k=>`<button class="game-option ${state.game===k?'active':''}" data-game="${k}" aria-pressed="${state.game===k}"><span class="game-option-icon">${games[k].icon}</span><span><strong>${games[k].name}</strong><small>${games[k].sub}</small></span><span class="game-option-check">${state.game===k?'✓':'↗'}</span></button>`).join('');
+  $('#game-options').innerHTML=types.map(k=>'<button class="game-option" data-game="'+k+'" aria-pressed="'+(state.game===k)+'">'+(k==='intersection'?'<svg class="game-option-art" viewBox="0 0 150 125" width="150" height="125" aria-hidden="true"><circle cx="59" cy="61" r="34" fill="#ff681d" opacity=".7"/><circle cx="91" cy="61" r="34" fill="#18233b" opacity=".7"/><circle cx="75" cy="84" r="27" fill="#ffb679" opacity=".8"/></svg>':'<img class="game-option-art" src="./assets/option-'+k+'.png" alt="" width="150" height="125">')+'<span><strong>'+games[k].name+'</strong><small>'+games[k].sub+'</small></span><span class="game-option-check">'+(state.game===k?'✓':'↗')+'</span></button>').join('');
   const group=$('#group-settings');group.hidden=state.mode!=='group';
   document.body.classList.toggle('intersection-mode',state.mode==='group'&&state.game==='intersection');
   if(state.mode==='group'&&state.game==='intersection'){
     group.hidden=true;$('#game-badge').textContent='OUR INTERSECTION · DEMO 3';$('#board-status').textContent='NICKNAME ONLY';$('#game-actions').innerHTML='';$('#game-footnote').textContent='방의 점심 조건은 생성 시 고정돼요. 각자 다른 휴대폰에서 메뉴를 선택해 보세요.';
-    mountRoomFlow($('#game-stage'),{onContext:roomContext,getFilters:()=>({location:state.location,origin:state.origin,selectedLocation:state.selectedLocation,lunchDeadline:state.lunchDeadline,budget:state.budget,time:state.time,distance:state.distance,categories:[...state.categories]}),onChoose:async(id,filters,people)=>{Object.assign(state,filters);state.people=people||state.people;state.mode='solo';state.game='gacha';syncFilters();finish(gameMenu(id));await findRestaurants();}});return;
+    mountRoomFlow($('#game-stage'),{onContext:roomContext,getFilters:()=>({location:state.location,origin:state.origin,selectedLocation:state.selectedLocation,lunchDeadline:state.lunchDeadline,budget:state.budget,time:state.time,distance:state.distance,categories:[...state.categories]}),onChoose:async(id,filters,people)=>{Object.assign(state,filters);state.people=people||state.people;state.mode='solo';state.game='gacha';syncFilters();const url=new URL(location.href);url.searchParams.delete('room');history.replaceState(null,'',url);finish(gameMenu(id));await findRestaurants();}});return;
   }
   closeRoomFlow();
 
@@ -183,7 +180,20 @@ function renderGame(pool){
   if(state.game==='ladder'){$('#game-actions').innerHTML='<span>참가자를 누른 순서대로 진행해요</span><button class="secondary" data-action="reset-ladder">새 사다리</button>';return;}
   $('#game-actions').innerHTML=['draw','ticket'].includes(state.game)?`<span class="interaction-hint">↑ ${state.game==='draw'?'카드':'티켓'}를 직접 눌러보세요</span>`:`<button class="primary play-cta" data-action="${state.pending?'open-capsule':'play'}" ${!pool.length?'disabled':''}>${games[state.game].icon} ${action}<span>↗</span></button>`;
 }
-function gachaArt(){return `<div class="machine-scene"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="float-food food-one">🍜</span><span class="float-food food-two">🍔</span><span class="float-food food-three">🍚</span><span class="machine-spark spark-one">✳</span><span class="machine-spark spark-two">+</span><svg class="gacha-machine" width="232" height="280" viewBox="0 0 232 280" role="img" aria-label="오렌지색 점심 캡슐 뽑기 기계"><defs><linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9cb5d8" stop-opacity=".19"/><stop offset="1" stop-color="#547495" stop-opacity=".03"/></linearGradient><linearGradient id="orange" x2=".8" y2="1"><stop stop-color="#ff843d"/><stop offset="1" stop-color="#ff5713"/></linearGradient><clipPath id="bowl"><path d="M45 49 Q116 18 187 49 L187 130 Q181 164 116 164 Q51 164 45 130Z"/></clipPath></defs><ellipse cx="116" cy="268" rx="91" ry="10" fill="#000" opacity=".22"/><path d="M45 49 Q116 18 187 49 L187 130 Q181 164 116 164 Q51 164 45 130Z" fill="url(#glass)" stroke="#7391b7" stroke-width="2"/><g clip-path="url(#bowl)"><g transform="translate(80 125) rotate(-25)"><circle r="24" fill="#c5ff24"/><path d="M-24 0H24" stroke="#759913" stroke-width="2"/><path d="M-15 -13q7 -8 15 -7" fill="none" stroke="white" opacity=".65" stroke-width="4" stroke-linecap="round"/></g><g transform="translate(130 123) rotate(20)"><circle r="24" fill="#ff7128"/><path d="M-24 0H24" stroke="#ad3f0a" stroke-width="2"/></g><g transform="translate(167 102) rotate(-30)"><circle r="22" fill="#b6c9ff"/><path d="M-22 0H22" stroke="#788bc0" stroke-width="2"/></g><g transform="translate(111 82) rotate(30)"><circle r="22" fill="#d8e5f7"/><path d="M-22 0H22" stroke="#95a9c5" stroke-width="2"/><path d="M-13 -12q5 -6 12 -6" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"/></g><g transform="translate(58 91) rotate(50)"><circle r="21" fill="#ffb2cb"/><path d="M-21 0H21" stroke="#bf7596" stroke-width="2"/></g><g transform="translate(151 65) rotate(-10)"><circle r="20" fill="#c5ff24"/><path d="M-20 0H20" stroke="#7ea020" stroke-width="2"/></g></g><path d="M58 58v53" stroke="white" opacity=".25" stroke-width="5" stroke-linecap="round"/><path d="M39 48Q116 20 193 48L191 56Q116 32 41 56Z" fill="#ff752d"/><rect x="74" y="25" width="84" height="14" rx="7" fill="#ff7c32"/><path d="M45 153H187L201 245Q202 258 188 258H44Q30 258 31 245Z" fill="url(#orange)"/><path d="M47 160H185" stroke="#ffac75" stroke-width="3"/><rect x="58" y="172" width="116" height="22" rx="4" fill="#112039"/><text x="116" y="187" fill="#c5ff24" font-family="Arial,sans-serif" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="2">LUNCH CAPSULE</text><circle cx="116" cy="215" r="19" fill="#d94912"/><circle cx="116" cy="214" r="15" fill="#dbe6f4" stroke="#19283b" stroke-width="2"/><rect x="98" y="210" width="36" height="8" rx="4" fill="#243754" transform="rotate(-28 116 214)"/><rect x="153" y="205" width="17" height="5" rx="2" fill="#9e360e"/><path d="M85 258v-13q31-14 62 0v13" fill="#182740"/><rect x="38" y="257" width="156" height="9" rx="4" fill="#df4b12"/></svg><span class="machine-caption">A CAPSULE FULL OF POSSIBILITIES</span></div>`;}
+function gachaArt() {
+  return /* HTML */ `
+    <div class="machine-scene">
+      <img
+        class="gacha-machine"
+        src="./assets/gacha-machine.png"
+        alt="오렌지색 점심 캡슐 뽑기 기계"
+        width="232"
+        height="240"
+      />
+    </div>
+  `;
+}
+
 function wheelArt(pool){const n=pool.length||1,colors=['#FF641B','#233550','#C5FF24','#354863','#FF9A63','#466143'];const paths=pool.map((m,i)=>{const a=i/n*Math.PI*2-Math.PI/2,b=(i+1)/n*Math.PI*2-Math.PI/2,mid=(a+b)/2;const point=t=>`${160+145*Math.cos(t)},${160+145*Math.sin(t)}`;return `<path d="M160,160 L${point(a)} A145,145 0 ${n===1?1:0},1 ${point(b)} Z" fill="${colors[i%colors.length]}" stroke="#0C1426" stroke-width="2"/><text x="${160+102*Math.cos(mid)}" y="${160+102*Math.sin(mid)}" fill="${i%colors.length===2?'#142331':'#fff'}" font-size="${n>16?10:12}" font-weight="700" text-anchor="middle" dominant-baseline="central" transform="rotate(${mid*180/Math.PI+90},${160+102*Math.cos(mid)},${160+102*Math.sin(mid)})">${esc(m.name.slice(0,6))}</text>`;}).join('');return `<div class="wheel-scene"><span class="wheel-pointer">▼</span><svg class="roulette-wheel" viewBox="0 0 320 320" role="img" aria-label="${pool.length}개 메뉴가 담긴 룰렛"><circle cx="160" cy="160" r="155" fill="#17243B" stroke="#d0deee" stroke-width="3"/>${n===1&&pool.length?'<circle cx="160" cy="160" r="145" fill="#FF641B"/>':''}${paths}</svg><span class="wheel-center">LUNCH<br>RUN ↗</span></div>`;}
 const gs={entries:[],menus:[],queue:[],played:[],started:false,running:false,winningEnd:null,current:null,log:[]};
 function ensureGroup(pool){for(let i=0;i<state.people;i++){const menu=pool.length?pool[i%pool.length]:null;if(gs.entries[i]===undefined)gs.entries[i]=menu?.name||'';if(gs.menus[i]===undefined)gs.menus[i]=menu?.name||'';}}
@@ -203,7 +213,7 @@ async function queueLadder(start){
  while(gs.queue.length&&!state.result){const next=gs.queue.shift();gs.played.push(next);gs.current=next;renderGame(candidates());setBusy(true);queueButtons();const t=state.ladder.trace(next),x=i=>45+i*510/(state.people-1),y=r=>25+r*175/(state.ladder.rows+1),path=$('#ladder-trace');path.setAttribute('d',t.points.map((v,i)=>`${i?'L':'M'}${x(v.x)},${y(v.y)}`).join(' '));let len=path.getTotalLength();path.style.strokeDasharray=len;path.style.strokeDashoffset=len;path.getBoundingClientRect();path.style.transition='stroke-dashoffset 1.5s linear';path.style.strokeDashoffset=0;await delay(1600);if(roundVersion!==poolVersion)return;setBusy(false);gs.current=null;let won=t.end===gs.winningEnd;gs.log.push(`${gs.played.length}번째 · ${state.names[next]} · ${gs.menus[next]} → ${won?'당첨!':'꽝'}`);if(won){gs.queue=[];finish(entryResult(gs.menus[next].trim()));$('#game-stage').insertAdjacentHTML('beforeend','<div class="ladder-log" role="status">'+gs.log.map(esc).join('<br>')+'</div>');break;}renderGame(candidates());}
  }finally{if(roundVersion===poolVersion){gs.running=false;if(state.busy)setBusy(false);}}
 }
-function renderResult(){const m=state.result;if(m.entryOnly){$('#board-status').textContent='입력값 당첨!';$('#game-stage').innerHTML=`<div class="result-scene"><span class="result-kicker">입력값 당첨</span><h3 class="result-title">${esc(m.name)}</h3><p>${esc(m.desc)}</p></div>`;$('#game-actions').innerHTML='<button class="secondary" data-action="again">한 번 더</button>';return;}$('#board-status').innerHTML='<i class="live-dot"></i> LUNCH DECIDED!';$('#game-stage').innerHTML=`<div class="result-scene"><div class="confetti">✳ <span>✦</span> ✳</div><span class="result-kicker">TODAY’S LUCKY LUNCH</span><div class="result-emoji">${m.emoji}</div><h3 class="result-title">${esc(m.name)}</h3><p class="result-desc">${esc(m.desc)}</p><div class="result-stats">${menuStats(m)}</div><p class="result-note">선택 조건의 메뉴 후보입니다. 실제 가격·영업 여부는 식당 검색 후 확인해요.${state.people>1?`<br>${state.people}명이 함께 먹을 오늘의 공통 메뉴!`:''}</p></div>`;$('#game-actions').innerHTML='<button class="secondary" data-action="again">↻ 한 번 더</button><button class="primary" data-action="find">이 메뉴로 식당 찾기 ↗</button>';$('#game-footnote').textContent='메뉴가 마음에 들면, 근처 식당을 골라보세요.';}
+function renderResult(){const m=state.result;if(m.entryOnly){$('#board-status').textContent='입력값 당첨!';$('#game-stage').innerHTML=`<div class="result-scene"><span class="result-kicker">입력값 당첨</span><h3 class="result-title">${esc(m.name)}</h3><p>${esc(m.desc)}</p></div>`;$('#game-actions').innerHTML='<button class="secondary" data-action="again">한 번 더</button>';return;}$('#board-status').innerHTML='<i class="live-dot"></i> LUNCH DECIDED!';$('#game-stage').innerHTML=`<div class="result-scene"><div class="confetti">✳ <span>✦</span> ✳</div><span class="result-kicker">TODAY’S LUCKY LUNCH</span><h3 class="result-title">${esc(m.name)}</h3><p class="result-desc">${esc(m.desc)}</p><div class="result-stats">${menuStats(m)}</div><p class="result-note">DB 표시 가격·저장된 영업시간 기준 후보입니다. 실제 매장 상황은 달라질 수 있어요.${state.people>1?`<br>${state.people}명이 함께 먹을 오늘의 공통 메뉴!`:''}</p></div>`;$('#game-actions').innerHTML='<button class="secondary" data-action="again">↻ 한 번 더</button><button class="primary" data-action="find">이 메뉴로 식당 찾기 ↗</button>';$('#game-footnote').textContent='메뉴가 마음에 들면, 근처 식당을 골라보세요.';}
 async function play(source){
   if(state.busy)return;validateGamePool();const roundVersion=poolVersion;if(state.mode==='group'&&state.game==='roulette'){const entries=gs.entries.slice(0,state.people).map(v=>v.trim());if(entries.some(v=>!v)){toast('입력값을 모두 채워주세요.');return;}if(!validateEntries(entries)){toast('현재 조건의 후보 메뉴명만 입력해주세요.');return;}const i=randomIndex(entries.length);setBusy(true);try{$('.roulette-wheel').style.transform=`rotate(${360*5+360-(i+.5)*360/entries.length}deg)`;await delay(2100);if(roundVersion!==poolVersion)return;finish(entryResult(entries[i]));}finally{if(roundVersion===poolVersion)setBusy(false);}return;}const pool=candidates();if(!pool.length){toast('먼저 추천 조건을 조금 넓혀주세요.');return;}
   if(state.game==='random'){state.game=['draw','gacha','ticket'][randomIndex(3)];renderGame(pool);toast(`${games[state.game].name} 당첨! 이 게임으로 골라볼까요?`);return;}
@@ -236,7 +246,7 @@ async function drawAiMenu(){
   try{await delay(900);finish(chosen);toast('메뉴 결정! 이제 이 메뉴를 파는 식당을 뽑아보세요.');}finally{setBusy(false);}
 }
 
-function switchView(view){if(state.busy)return;if(view==='restaurants'){saveGame();location.assign('/map/');return;}if(view!==state.view){window.LunchRunChat.close();cancelGameRequests();window.LunchRunLocationPicker.close();}state.view=view;saveGame();if(view!=='game')closeRoomFlow();state.view=view;$$('.view').forEach(e=>e.hidden=e.id!==`view-${view}`);$$('.nav-item').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$$('.progress-step').forEach(e=>e.classList.toggle('active',Number(e.dataset.step)===(view==='restaurants'?(state.route?3:2):1)));if(view==='restaurants')renderRestaurants();if(view==='saved')renderSaved();if(view==='game'&&state.game==='intersection')renderGame(candidates());}
+function switchView(view){if(state.busy)return;if(view==='restaurants'){saveGame();location.assign('/map/');return;}if(view!==state.view){window.LunchRunChat.close();cancelGameRequests();window.LunchRunLocationPicker.close();}state.view=view;saveGame();if(view!=='game')closeRoomFlow();state.view=view;$$('.view').forEach(e=>e.hidden=e.id!==`view-${view}`);$$('.nav-item').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$$('.progress-step').forEach(e=>e.classList.toggle('active',Number(e.dataset.step)===(view==='restaurants'?(state.route?3:2):1)));if(view==='restaurants')renderRestaurants();if(view==='saved')renderSaved();if(view==='game'&&state.game==='intersection')renderGame(candidates());updateShell();}
 function restaurants(){return state.restaurantCandidates||[];}
 
 function restaurantDrawPanel(rs){
@@ -275,23 +285,11 @@ async function drawRestaurant(){
 function renderSaved(){const saved=MENUS.filter(m=>state.favorites.includes(m.id)),blocked=MENUS.filter(m=>state.blacklist.includes(m.id));$('#view-saved').innerHTML=`<div class="view-heading"><span class="section-index">MY LUNCH TASTE</span><h1>취향을 알면, 점심이 쉬워져요.</h1><p>이 브라우저에 저장한 찜과 제외 메뉴예요. 실제 계정과 동기화되지 않아요.</p></div><div class="saved-section"><h2>♡ 찜한 메뉴 <span>${saved.length}</span></h2><div class="saved-grid">${saved.map(m=>savedCard(m,false)).join('')||'<div class="empty-state"><h3>아직 찜한 메뉴가 없어요</h3><p>메뉴 카드의 하트를 눌러 취향을 모아보세요.</p><button class="secondary" data-action="back-game">메뉴 둘러보기 ↗</button></div>'}</div></div><div class="saved-section"><h2>⊘ 추천에서 제외 <span>${blocked.length}</span></h2><p class="micro">개인 추첨과 빠른 추천에서 제외됩니다. 교집합 모임방은 공동 후보를 사용합니다.</p><div class="saved-grid">${blocked.map(m=>savedCard(m,true)).join('')||'<div class="empty-state"><p>제외한 메뉴가 없어요. 메뉴 상세에서 설정할 수 있어요.</p></div>'}</div></div>`;}
 function savedCard(m,blocked){return `<article class="saved-card"><span>${m.emoji}</span><div><small>${esc(m.category)}</small><h3>${esc(m.name)}</h3><p>${menuStats(m)}</p></div><button class="secondary" ${blocked?'data-block':'data-save'}="${m.id}">${blocked?'제외 해제':'찜 해제'}</button></article>`;}
 function toggleSaved(id){state.favorites=state.favorites.includes(id)?state.favorites.filter(x=>x!==id):[...state.favorites,id];persist();render();toast(state.favorites.includes(id)?'나의 취향에 저장했어요.':'찜한 메뉴에서 해제했어요.');}
-function detail(id){const m=candidates().find(x=>String(x.id)===String(id))||MENUS.find(x=>String(x.id)===String(id));if(!m)return;const eligible=candidates().some(x=>x.id===m.id);openDialog(`<div class="dialog-body menu-detail"><span class="detail-emoji">${m.emoji}</span><span class="section-index">${esc(m.category)} · MENU DETAIL</span><h2 id="dialog-title">${esc(m.name)}</h2><p>${esc(m.desc)}</p><div class="result-stats">${menuStats(m)}</div><p class="micro">실제 식당 가격과 영업 여부는 식당 검색 후 확인합니다. 이동·대기·식사시간은 아직 검증하지 않습니다.</p><div class="dialog-actions"><button class="secondary" data-save="${m.id}">${state.favorites.includes(m.id)?'♥ 찜 해제':'♡ 찜하기'}</button><button class="secondary" data-block="${m.id}">${state.blacklist.includes(m.id)?'제외 해제':'⊘ 추천에서 제외'}</button><button class="primary" data-choose="${m.id}" ${!eligible?'disabled':''}>${eligible?'이 메뉴로 선택 ↗':'현재 추천 조건 밖이에요'}</button></div></div>`);}
+function detail(id){const m=candidates().find(x=>String(x.id)===String(id))||MENUS.find(x=>String(x.id)===String(id));if(!m)return;const eligible=candidates().some(x=>x.id===m.id);openDialog(`<div class="dialog-body menu-detail"><span class="detail-emoji">${m.emoji}</span><span class="section-index">${esc(m.category)} · MENU DETAIL</span><h2 id="dialog-title">${esc(m.name)}</h2><p>${esc(m.desc)}</p><div class="result-stats">${menuStats(m)}</div><p class="micro">DB 표시 가격과 저장된 영업시간 기준입니다. 이동·대기·식사시간은 아직 검증하지 않습니다.</p><div class="dialog-actions"><button class="secondary" data-save="${m.id}">${state.favorites.includes(m.id)?'♥ 찜 해제':'♡ 찜하기'}</button><button class="secondary" data-block="${m.id}">${state.blacklist.includes(m.id)?'제외 해제':'⊘ 추천에서 제외'}</button><button class="primary" data-choose="${m.id}" ${!eligible?'disabled':''}>${eligible?'이 메뉴로 선택 ↗':'현재 추천 조건 밖이에요'}</button></div></div>`);}
 function openDialog(html){$('#dialog-content').innerHTML=html;if(!$('#app-dialog').open)$('#app-dialog').showModal();}
 function profileDialog(){openDialog(`<div class="dialog-body"><span class="section-index">HELLO, LUNCH MATE</span><h2 id="dialog-title">${state.profile?'반가워요, '+esc(state.profile)+'님!':'나만의 점심 취향을 모아보세요'}</h2><p>회원 흐름을 미리 보는 로컬 데모예요.<br>SNS 로그인과 실제 회원가입은 연결하지 않았어요.</p><label for="nickname">어떻게 불러드릴까요?</label><input id="nickname" class="field" maxlength="12" placeholder="닉네임 (최대 12자)" value="${esc(state.profile)}"><p class="profile-note">닉네임·찜·제외 메뉴는 이 브라우저에만 저장돼요.<br>게스트도 모든 게임을 이용할 수 있어요.</p><div class="dialog-actions">${state.profile?'<button class="secondary" data-action="logout">게스트로 사용</button>':''}<button class="primary" data-action="login">닉네임 저장하고 시작하기 ↗</button></div></div>`);}
 
-$('#lunch-time').addEventListener('input',e=>{if(state.busy)return;state.time=Number(e.target.value);conditionsChanged();});
-$('#filters-form').addEventListener('submit',e=>e.preventDefault());
-$('#budget').addEventListener('input',e=>{if(state.busy)return;state.budget=Number(e.target.value);conditionsChanged();});
-$('#distance').addEventListener('input',e=>{if(state.busy)return;state.distance=Number(e.target.value);conditionsChanged();});
-$('#location').addEventListener('click',()=>{
- if(state.busy)return;
- window.LunchRunLocationPicker.open(item=>{
-  if(state.busy)return;
-  state.selectedLocation={...item};state.location=item.name;state.origin=[item.lat,item.lng];
-  state.view='game';conditionsChanged();switchView('game');
- },state.selectedLocation);
-});
-$('#profile-btn').addEventListener('click',profileDialog);
+$('#profile-btn').addEventListener('click',()=>window.LunchRunProfile.open({onChange:name=>{state.profile=name;persist();}}));
 $('#close-dialog').addEventListener('click',()=>$('#app-dialog').close());
 $('#app-dialog').addEventListener('click',e=>{if(e.target===$('#app-dialog'))$('#app-dialog').close();});
 document.addEventListener('input',e=>{if(e.target.dataset.entry!==undefined){gs.entries[Number(e.target.dataset.entry)]=e.target.value;const wheel=$('.wheel-scene');if(wheel)wheel.outerHTML=wheelArt(gs.entries.slice(0,state.people).map(name=>({name})));}if(e.target.dataset.ladderMenu!==undefined&&!gs.started)gs.menus[Number(e.target.dataset.ladderMenu)]=e.target.value;if(e.target.dataset.name!==undefined)state.names[Number(e.target.dataset.name)]=e.target.value;});
@@ -303,8 +301,8 @@ document.addEventListener('click', async e=>{
   if(d.view){window.LunchRunLocationPicker.close();switchView(d.view);return;}
   if(d.time){state.time=Number(d.time);conditionsChanged();return;}
   if(d.category){const c=d.category;state.categories=c==='전체'||state.categories.includes(c)?[]:[c];conditionsChanged();return;}
-  if(d.mode==='ai'){resetRound();state.mode='ai';saveGame();render();return;}if(d.mode){window.LunchRunChat.close();resetRound();state.mode=d.mode;state.game=d.mode==='group'?'roulette':'gacha';if(d.mode==='group'&&state.people<2)state.people=2;if(d.mode==='solo')state.people=1;state.ladderStart=0;conditionsChanged();return;}
-  if(d.game){shared.setMenu(null);resetRestaurantDraw();resetRound();state.game=d.game;if(d.game==='ladder'&&state.people>8){state.people=8;toast('사다리는 최대 8명이 함께할 수 있어요.');}state.result=null;state.pending=null;state.ladder=null;state.ladderStart=0;syncFilters();renderGame(candidates());return;}
+  if(d.mode==='ai'){saveGame();location.assign('/ai');return;}if(d.mode){window.LunchRunChat.close();resetRound();state.mode=d.mode;state.game=d.mode==='group'?'roulette':'gacha';if(d.mode==='group'&&state.people<2)state.people=2;if(d.mode==='solo')state.people=1;state.ladderStart=0;conditionsChanged();return;}
+  if(d.game){shared.setMenu(null);resetRestaurantDraw();resetRound();state.game=d.game;if(d.game==='ladder'&&state.people>8){state.people=8;toast('사다리는 최대 8명이 함께할 수 있어요.');}state.result=null;state.pending=null;state.ladder=null;state.ladderStart=0;syncFilters();renderGame(candidates());navigateGameScreen('play');return;}
   if(b.id==='people-plus'||b.id==='people-minus'){const max=state.game==='ladder'&&state.mode==='group'?8:12;const next=state.people+(b.id==='people-plus'?1:-1);if(next>max){toast(`이 게임은 최대 ${max}명까지 참여할 수 있어요.`);return;}resetRound();state.people=Math.max(1,Math.min(max,next));if(state.people>1&&state.mode==='solo'){state.mode='group';state.game='roulette';}if(state.people===1&&state.mode==='group'){state.mode='solo';state.game='gacha';}state.ladderStart=0;conditionsChanged();return;}
   if(d.ladderStart!==undefined){state.ladderStart=Number(d.ladderStart);renderGame(candidates());return;}
   if(d.draw!==undefined||d.ticket!==undefined){await play(b);return;}
@@ -333,11 +331,45 @@ document.addEventListener('click', async e=>{
   if(action==='logout'){state.profile='';state.names[0]='나';persist();$('#app-dialog').close();render();toast('게스트 모드로 전환했어요. 취향은 이 브라우저에 유지돼요.');}
   }catch(error){toast(error.message);}
 });
-$('#category-options').innerHTML=FOOD_TYPES.map(c=>`<button type="button" class="category" data-category="${c}"><span>🍽️</span> ${c}</button>`).join('');
-updateProfile();syncFilters();render();if(launch.warning)toast(launch.warning);refreshCandidates();
+updateProfile();syncFilters();render();if(launch.warning)toast(launch.warning);if(!/^\d{6}$/.test(new URLSearchParams(location.search).get('room')||''))refreshCandidates();
 
 window.addEventListener('pagehide',()=>{saveGame();cancelGameRequests();closeRoomFlow();window.LunchRunLocationPicker.close();});
 window.addEventListener('pageshow',event=>{
- if(event.persisted){cancelGameRequests();setBusy(false);resetRound();state.restaurantDrawing=false;applySharedGame();syncFilters();render();switchView(state.view);refreshCandidates();}
+ if(event.persisted){state.gameScreen=location.pathname.split('/').filter(Boolean).at(-1)==='play'?'play':'select';cancelGameRequests();setBusy(false);resetRound();state.restaurantDrawing=false;applySharedGame();syncFilters();render();switchView(state.view);refreshCandidates();}
 });
 switchView(state.view);
+
+function updateShell(){
+ document.body.dataset.gameScreen=state.gameScreen;
+ const title=state.mode==='group'?'함께 먹을 메뉴를 골라요':'혼자서 가볍게 골라요';
+ $('#game-page-title').textContent=state.gameScreen==='play'?games[state.game].name:title;
+ $('#conditions-summary').textContent=[won(state.budget)+'원',shared.remainingMinutes(state.lunchDeadline)+'분 남음',state.distance+'m',state.people+'명',state.categories[0]||'전체',state.selectedLocation?.address||state.selectedLocation?.name||'위치 미설정'].join(' / ');
+ window.LunchRunMotion?.enter($('#view-'+state.view),[state.view,state.gameScreen,state.mode,state.game,state.result?.id||'none'].join(':'));
+ $$('.stage-dock button').forEach(b=>{const active=b.dataset.shell==='game';b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
+}
+function navigateGameScreen(screen,{replace=false}={}){
+ if(state.busy)return;
+ state.gameScreen=screen;if(state.view!=='game')switchView('game');
+ const target=(screen==='play'?'/games/play':'/games/')+location.search;
+ if(location.pathname+location.search!==target)history[replace?'replaceState':'pushState'](null,'',target);
+ saveGame();updateShell();$('#game-page-title').focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});
+}
+function openGameLocation(){
+ if(state.busy)return;
+ window.LunchRunLocationPicker.open(item=>{if(state.busy)return;state.selectedLocation={...item};state.location=item.name;state.origin=[item.lat,item.lng];state.view='game';conditionsChanged();switchView('game');},state.selectedLocation);
+}
+document.addEventListener('click',e=>{
+ const b=e.target.closest('[data-shell]');if(!b||state.busy||b.disabled)return;
+ const action=b.dataset.shell;
+ if(action==='home'){saveGame();location.assign('/');}
+ else if(action==='ai'){saveGame();location.assign('/ai');}
+ else if(action==='conditions')openGameLocation();
+ else if(action==='game'||action==='game-selection')navigateGameScreen('select');
+ else if(action==='restaurants'||action==='route'){if(!state.result||state.result.entryOnly){toast('게임에서 메뉴를 먼저 결정해주세요.');return;}findRestaurants().catch(error=>toast(error.message));}
+});
+window.addEventListener('popstate',()=>{
+ if(state.busy){cancelGameRequests();resetRound();setBusy(false);}
+ window.LunchRunLocationPicker.close();applySharedGame();state.view='game';
+ state.gameScreen=location.pathname.replace(/\/+$/,'').endsWith('/play')?'play':'select';
+ render();switchView('game');
+});

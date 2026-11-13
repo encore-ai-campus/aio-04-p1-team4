@@ -21,3 +21,6 @@ tmp/pytest-state*/
 tmp/pytest-map*/
 tmp/pytest-chat*/
 tmp/map-live-sdk.png
+
+# Local collection previews, test databases and logs
+/tmp/

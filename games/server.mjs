@@ -20,7 +20,7 @@ const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8'
 function forwardedHost(req){const remote=req.socket.remoteAddress;if(remote!=='127.0.0.1'&&remote!=='::1'&&remote!=='::ffff:127.0.0.1')return '';return req.headers['x-forwarded-host']||'';}
 function publicUrl(req){const host=forwardedHost(req);if(!host)return phoneUrl(port);const protocol=req.headers['x-forwarded-proto']||'http',prefix=req.headers['x-forwarded-prefix']||'';return `${protocol}://${host}${prefix}`;}
 http.createServer(async(req,res)=>{try{
- const u=new URL(req.url,'http://localhost'),parts=u.pathname.split('/').filter(Boolean),key=(req.headers.authorization||'').replace(/^Bearer /,'');
+ const u=new URL(req.url,'http://localhost');if(!req.headers['x-forwarded-prefix']&&(u.pathname==='/games'||u.pathname.startsWith('/games/')))u.pathname=u.pathname.slice(6)||'/';const parts=u.pathname.split('/').filter(Boolean),key=(req.headers.authorization||'').replace(/^Bearer /,'');
  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');
  if(req.method==='GET'&&u.pathname==='/api/network')return send(res,200,{publicUrl:publicUrl(req),localUrl:`http://127.0.0.1:${port}`,phoneNote:'같은 공유기의 Wi-Fi에서 QR로 참여하세요. 모바일 데이터·외부 인터넷에서는 이 주소로 접속할 수 없어요.'});
  if(req.method==='POST'){
@@ -40,14 +40,14 @@ http.createServer(async(req,res)=>{try{
   if(qrCache.get(room.code)?.url!==url){const result=spawnSync(python,[path.join(base,'qr.py')],{input:url,encoding:'utf8',windowsHide:true,timeout:10000});if(result.status!==0)throw new RoomError(503,'QR 생성이 불가능해요. 초대 링크나 방 코드를 사용해주세요.');qrCache.set(room.code,{url,svg:result.stdout});}
   res.writeHead(200,{'Content-Type':'image/svg+xml','Cache-Control':'no-store'});return res.end(qrCache.get(room.code).svg);
  }
- if(req.method==='GET'&&['/static/chat.js','/static/chat.css','/static/state.js','/static/location.js','/static/location-picker.js','/static/location-picker.css'].includes(u.pathname)){
+ if(req.method==='GET'&&['/static/chat.js','/static/chat.css','/static/state.js','/static/location.js','/static/location-picker.js','/static/location-picker.css','/assets/shared-header.css','/assets/profile-dialog.css','/assets/profile-dialog.js','/assets/screen-motion.js'].includes(u.pathname)){
    const upstream=await fetch(backendOrigin+u.pathname,{signal:AbortSignal.timeout(10000)});
    res.writeHead(upstream.status,{'Content-Type':upstream.headers.get('content-type')||'text/plain','Cache-Control':'no-cache'});
    return res.end(Buffer.from(await upstream.arrayBuffer()));
  }
  if(u.pathname.startsWith('/api/'))throw new RoomError(404,'API를 찾지 못했어요.');
  if(req.method!=='GET')throw new RoomError(405,'지원하지 않는 방식이에요.');
- const target=path.resolve(root,'.'+decodeURIComponent(u.pathname==='/'?'/index.html':u.pathname));if(!target.startsWith(root+path.sep))throw new RoomError(403,'접근할 수 없어요.');
- const data=fs.readFileSync(target);res.writeHead(200,{'Content-Type':types[path.extname(target)]||'application/octet-stream','Cache-Control':'no-cache'});res.end(data);
+ const target=path.resolve(root,'.'+decodeURIComponent(['/','/play','/play/'].includes(u.pathname)?'/index.html':u.pathname));if(!target.startsWith(root+path.sep))throw new RoomError(403,'접근할 수 없어요.');
+ let data=fs.readFileSync(target);if(path.basename(target)==='index.html'&&!req.headers['x-forwarded-prefix'])data=Buffer.from(data.toString().replace('<base href="/games/" />','<base href="/" />'));res.writeHead(200,{'Content-Type':types[path.extname(target)]||'application/octet-stream','Cache-Control':'no-cache'});res.end(data);
  }catch(e){send(res,e.status|| (e.code==='ENOENT'?404:500),{error:e.status?e.message:'요청을 처리하지 못했어요. 잠시 후 다시 시도해주세요.'});}
 }).listen(port,process.env.HOST||'0.0.0.0',()=>console.log(`LunchRun DEMO 3\nPC: http://127.0.0.1:${port}\nPHONE (same Wi-Fi): ${phoneUrl(port)}`));

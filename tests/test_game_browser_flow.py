@@ -23,11 +23,22 @@ def free_port():
         return sock.getsockname()[1]
 
 
+def select_game(page, name):
+    if page.url.split('?',1)[0].rstrip('/').endswith('/play'):
+        page.locator('.stage-dock [data-shell="game"]').click()
+    page.locator(f'[data-game="{name}"]').click()
+    page.wait_for_url('**/games/play*')
+
+
 def test_games_use_backend_candidates_and_search_only_after_confirmation(tmp_path, monkeypatch):
     root = Path(__file__).resolve().parents[1]
     api_port, node_port = free_port(), free_port()
     api_url, node_url = f"http://127.0.0.1:{api_port}", f"http://127.0.0.1:{node_port}"
     database = Database(f"sqlite:///{(tmp_path / 'browser.db').as_posix()}")
+    database.init_schema()
+    from test_db_first_flow import add_place
+    with database.session_factory.begin() as session:
+        add_place(session, "test-place", price=8000, latitude=37.48, longitude=126.88)
     monkeypatch.setattr(app.state, "database", database)
     monkeypatch.setattr(games_proxy, "NODE_ORIGIN", node_url)
     import os
@@ -65,12 +76,12 @@ def test_games_use_backend_candidates_and_search_only_after_confirmation(tmp_pat
             page.wait_for_function("document.querySelector('#candidate-count').textContent === '1개'")
             page.locator('[data-mode="solo"]').click()
             page.wait_for_function("document.querySelector('#candidate-count').textContent === '1개'")
-            page.locator('[data-game="random"]').click()
+            select_game(page, 'random')
             page.locator('[data-action="play"]').click()
             page.wait_for_function("document.querySelector('#game-badge').textContent !== 'SURPRISE ME'")
             lookup.assert_not_awaited()
             for game in ["gacha", "draw", "ticket"]:
-                page.locator(f'[data-game="{game}"]').click()
+                select_game(page, game)
                 if game == "gacha":
                     page.locator('[data-action="play"]').click()
                     page.locator('[data-action="open-capsule"]').first.click()
@@ -88,11 +99,15 @@ def test_games_use_backend_candidates_and_search_only_after_confirmation(tmp_pat
             assert page.evaluate('window.LunchRunState.read().menu.id') == 'noodle'
             page.unroute('**/api/recommendations')
             page.locator('#search-again').click()
-            page.wait_for_function("document.querySelector('#search-status').textContent !== '카카오 식당 검색·상세정보 확인·추천 조건 검증 중…'")
-            lookup.assert_awaited_once_with("짜장면", 37.48, 126.88, radius_m=500)
+            page.wait_for_function("document.querySelector('#search-status').textContent !== 'DB에서 메뉴·가격·영업 조건에 맞는 식당 조회 중…'")
+            lookup.assert_not_awaited()
             page.locator('[data-action="back-game"]').click()
+            page.wait_for_url('**/games/')
+            page.goto(api_url+'/games/play')
             page.wait_for_selector('.result-title')
+            page.locator('.stage-dock [data-shell="game"]').click()
             page.locator('[data-mode="group"]').click()
+            select_game(page, 'roulette')
             page.wait_for_function("document.querySelector('#candidate-count').textContent === '1개'")
             page.locator('[data-entry="0"]').fill("피자")
             page.locator('[data-action="play"]').click()
@@ -103,7 +118,7 @@ def test_games_use_backend_candidates_and_search_only_after_confirmation(tmp_pat
             page.wait_for_selector('.result-title')
             assert page.locator('.result-title').inner_text() == "짜장면"
             page.locator('[data-action="again"]').click()
-            page.locator('[data-game="ladder"]').click()
+            select_game(page, 'ladder')
             page.locator('[data-ladder-start="0"]').click()
             page.wait_for_function("document.querySelectorAll('[data-ladder-start]:disabled').length > 0 || !!document.querySelector('.result-title')")
             page.wait_for_function("!document.querySelector('.play-board').getAttribute('aria-busy') || document.querySelector('.play-board').getAttribute('aria-busy') === 'false'")
@@ -112,7 +127,7 @@ def test_games_use_backend_candidates_and_search_only_after_confirmation(tmp_pat
             page.wait_for_selector('.result-title')
             assert page.locator('.result-title').inner_text() == "짜장면"
             page.locator('[data-action="again"]').click()
-            page.locator('[data-game="intersection"]').click()
+            select_game(page, 'intersection')
             page.locator('#room-host-name').fill('browser-host')
             with page.expect_response(lambda r: r.url.endswith('/api/rooms') and r.request.method == 'POST') as created:
                 page.locator('[data-room-action="create"]').click()
@@ -136,8 +151,8 @@ def test_games_use_backend_candidates_and_search_only_after_confirmation(tmp_pat
             assert page.url.startswith(api_url + '/games/'), page.url
             page.go_forward()
             page.wait_for_url('**/map/**')
-            page.wait_for_function("document.querySelector('#search-status').textContent !== '카카오 식당 검색·상세정보 확인·추천 조건 검증 중…'")
-            assert lookup.await_count == 2
+            page.wait_for_function("document.querySelector('#search-status').textContent !== 'DB에서 메뉴·가격·영업 조건에 맞는 식당 조회 중…'")
+            lookup.assert_not_awaited()
             page.screenshot(path=str(tmp_path / 'game-restaurants.png'), full_page=True)
             # Verify list/real-coordinate overlay wiring and cached result restoration.
             page.evaluate('''()=>{const s=window.LunchRunState.read();window.LunchRunState.setRestaurants({

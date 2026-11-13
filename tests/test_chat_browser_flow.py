@@ -15,7 +15,7 @@ from app.main import app
 from app.chat_policy import QuestionInterpretation
 import games.app as games_proxy
 import test_recommendations as recommendations
-from test_game_browser_flow import free_port
+from test_game_browser_flow import free_port, select_game
 
 
 def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
@@ -55,7 +55,7 @@ def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
             page.goto(origin)
             page.evaluate("""() => {LunchRunState.setContext({location:{lat:37.48,lng:126.88,name:'예시 위치',source:'place'},conditions:{budget:9000,cuisine:'중식',deadline:Date.now()+30*60000}});window.dispatchEvent(new PopStateEvent('popstate'));}""")
             page.reload()
-            page.goto(origin+'/#ai')
+            page.goto(origin+'/ai')
             expect(page.locator('.lr-chat textarea')).to_be_enabled()
 
             def send(text, plan):
@@ -109,14 +109,14 @@ def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
 
             # Games use the exact same conversation and preserve their surrounding UI.
             page.goto(origin+'/games/')
-            page.locator('[data-mode=ai]').click()
+            page.locator('[data-shell=ai]').click()
             expect(page.locator('.lr-chat textarea')).to_be_enabled()
             expect(page.locator('.lr-chat-message')).to_have_count(8)
             page.evaluate('LunchRunState.setContext({conditions:{budget:9000}})')
             send('메뉴 추천해줘', {'intent':'recommend_menu'})
             boundary.search.assert_not_awaited()
             send('이 메뉴 식당 찾아줘', {'intent':'search_restaurants'})
-            boundary.search.assert_awaited_once()
+            boundary.search.assert_not_awaited()
             assert requests[-1]['radius_m'] == 100
             assert requests[-1]['menu_id'] == 'noodle'
             assert page.evaluate('LunchRunState.read().searchedAt')
@@ -127,16 +127,16 @@ def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
             send('가격 알려줘', {'intent':'ask_restaurant_detail','restaurant_id':'test-place','requested_detail':'price'})
             assert '8,000' in page.locator('.lr-chat-message').last.inner_text()
             assert boundary.interpret.call_args.kwargs['restaurants'][0]['id'] == 'test-place'
-            page.goto(origin+'/#ai')
+            page.goto(origin+'/ai')
             expect(page.locator('.lr-chat-map')).to_be_visible()
             page.locator('.lr-chat-map').click()
             page.wait_for_url('**/games/')
-            page.locator('[data-view="restaurants"]').click()
+            page.locator('[data-shell="restaurants"]').click()
             page.wait_for_url('**/map/**')
             page.go_back()
             assert page.url == origin+'/games/'
             page.go_back()
-            assert page.url.startswith(origin+'/#ai')
+            assert page.url.startswith(origin+'/ai')
             assert not errors
             page.screenshot(path=str(tmp_path/'chat-games.png'), full_page=True)
             browser.close()

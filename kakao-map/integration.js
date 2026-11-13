@@ -46,7 +46,7 @@
  function render(restored=false){
   const s=store.read();$('#search-location').textContent=s.location?`${s.location.name} · 반경 ${s.conditions.radius_m}m`:'출발 위치 미설정';$('#search-radius').value=s.conditions.radius_m;$('#radius-value').textContent=s.conditions.radius_m+'m';$('#cuisine-filter').value=s.conditions.cuisine;$('#map-budget').value=s.conditions.budget;
   $('#list-title').textContent=s.menu?`${s.menu.name} 관련 식당`:'메뉴를 먼저 선택해주세요';$('#count').textContent=`추천 ${s.restaurants.length} · 확인 필요 ${s.candidateRestaurants.length}`;
-  const list=$('#restaurant-list');list.replaceChildren();all().forEach((r,i)=>{const button=el('button',null,'restaurant-item');button.type='button';button.dataset.restaurant=r.id;button.append(el('span',String(i+1),'number'));const info=el('div');info.append(el('strong',r.name),el('small',r.verified?'검증된 추천':'확인 필요 후보'),el('small',r.address||'주소 미확인'),el('small',typeof r.price==='number'?r.price.toLocaleString()+'원':'가격 미확인'));button.append(info);button.onclick=()=>select(r.id);list.append(button);});
+  const list=$('#restaurant-list');list.replaceChildren();all().forEach((r,i)=>{const button=el('button',null,'restaurant-item');button.type='button';button.dataset.restaurant=r.id;button.append(el('span',String(i+1),'number'));const info=el('div');info.append(el('strong',r.name),el('small',r.verified?'검증된 추천':'확인 필요 후보'),el('small',r.address||'주소 미확인'),el('small',typeof r.price==='number'?r.price.toLocaleString()+'원':'가격 미확인'));if(r.serving_unverified)info.append(el('small','인분 미확인 · 표시 가격 기준'));button.append(info);button.onclick=()=>select(r.id);list.append(button);});
   if(!all().length)list.append(el('p',busy?'식당을 검색하고 있어요.':'표시할 식당이 없습니다. 조건을 확인하거나 메뉴를 다시 골라주세요.'));
   $('#random').disabled=busy||!s.restaurants.length;
   $('#selected-card').hidden=true;paintMap();const id=selected||s.selectedRestaurantId;if(id)select(id,false);
@@ -54,7 +54,7 @@
  }
  async function search(){
   cancel();const token=version;controller=new AbortController();const s=store.read();
-  try{const request=body(s);busy=true;render();status('카카오 식당 검색·상세정보 확인·추천 조건 검증 중…');const result=await post(s.menu?'/api/recommendations':'/map/api/nearby',request,controller.signal);if(token!==version)return;if(!store.setRestaurants(result,s.contextRevision,s.menu?.id??null))return;selected=null;busy=false;render();status(result.message||'검색을 완료했습니다.');}
+  try{const request=body(s);busy=true;render();status('DB에서 메뉴·가격·영업 조건에 맞는 식당 조회 중…');const result=await post(s.menu?'/api/recommendations':'/map/api/nearby',request,controller.signal);if(token!==version)return;if(!store.setRestaurants(result,s.contextRevision,s.menu?.id??null))return;selected=null;busy=false;render();status(result.message||'검색을 완료했습니다.');}
   catch(error){if(token===version){busy=false;render();status(error.name==='AbortError'?'검색이 취소되었거나 시간이 초과됐습니다. 다시 검색해주세요.':error.message);}}
  }
  async function change(patch){

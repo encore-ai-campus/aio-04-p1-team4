@@ -6,7 +6,7 @@ const path=require('node:path');
 const root=path.join(__dirname,'..','frontend');
 function harness(){
  const source=fs.readFileSync(path.join(root,'app.js'),'utf8');
- const context=vm.createContext({remainingLunch:()=>30});
+ const context=vm.createContext({remainingLunch:()=>30,clearTimeout});
  vm.runInContext(source.slice(source.indexOf('const $='),source.indexOf('async function run')),context);
  return {run:code=>vm.runInContext(code,context)};
 }

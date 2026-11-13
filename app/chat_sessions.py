@@ -77,6 +77,17 @@ class ChatSessionState(BaseModel):
     ) -> None:
         """성공한 API 응답과 그 시점의 화면 조건을 하나의 변경으로 기록한다."""
 
+        changed = (self.conditions is not None and
+            (self.conditions.budget != conditions.budget or self.conditions.cuisine != conditions.cuisine))
+        changed = changed or (self.location is not None and
+            (self.location.lat != location.lat or self.location.lng != location.lng))
+        changed = changed or (self.radius_m is not None and self.radius_m != radius_m)
+        changed = changed or (requested_menu_id is not None and requested_menu_id != self.selected_menu_id)
+        if changed:
+            self.selected_menu_id = requested_menu_id
+            self.restaurant_ids = []
+            self.candidate_restaurant_ids = []
+            self.pending_action = None
         self.conditions = conditions.model_copy(deep=True)
         self.location = location.model_copy(deep=True)
         self.radius_m = radius_m
@@ -86,6 +97,8 @@ class ChatSessionState(BaseModel):
         result = response.get("result")
         if isinstance(result, dict):
             menu = result.get("menu")
+            if menu is None:
+                self.selected_menu_id = None
             if isinstance(menu, dict) and isinstance(menu.get("id"), str):
                 self.selected_menu_id = menu["id"]
                 # 최근 메뉴는 중복을 제거한 뒤 최신 항목이 마지막에 오도록 보관한다.

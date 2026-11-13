@@ -65,5 +65,5 @@ def load_settings() -> Settings:
         chat_requests_per_day=os.environ.get("CHAT_REQUESTS_PER_DAY", "100"),
         max_request_bytes=os.environ.get("MAX_REQUEST_BYTES", "65536"),
         cookie_secure=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
-        database_url=os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL).strip(),
+        database_url=(os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL") or DEFAULT_DATABASE_URL).strip(),
     )

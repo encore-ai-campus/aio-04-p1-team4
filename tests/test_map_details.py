@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 from datetime import time
 from fastapi.testclient import TestClient
 from app.main import app
-from app.database import Database, Restaurant, Menu, BusinessHours
+from app.database import Database, Restaurant, Menu, BusinessHours, PlaceDetailStatus
 
 
 def test_map_details_and_nearby_use_database(tmp_path, monkeypatch):
@@ -12,7 +12,8 @@ def test_map_details_and_nearby_use_database(tmp_path, monkeypatch):
     with database.session_factory.begin() as session:
         row = Restaurant(id='db-place', name='DB 식당', latitude=37.48, longitude=126.88,
                          address='서울', place_url='https://place.map.kakao.com/1', cuisine='한식', category_name='음식점 > 한식')
-        row.menus = [Menu(name='비빔밥', normalized_name='비빔밥', price=8000, price_status='known')]
+        row.detail_status = PlaceDetailStatus(menu_status='success', hours_status='success')
+        row.menus = [Menu(menu_catalog_id='bibimbap', name='비빔밥', normalized_name='비빔밥', price=8000, price_status='known')]
         row.business_hours = [BusinessHours(day_of_week=day, holiday=False, start_time=time(0),
                               end_time=time(0), ends_next_day=True, sequence=0) for day in range(7)]
         session.add(row)

@@ -20,7 +20,7 @@ DEFAULT_MENU_CATALOG = (
     dict(id="kimchi", name="김치찌개", cuisine="한식", price_hint=9500,
          search_keyword="김치찌개", description="김치를 중심으로 끓인 따뜻한 한식 찌개예요.",
          aliases=("김치찌개",)),
-    dict(id="tofu", name="두부 채소 덮밥", cuisine="한식", price_hint=8500,
+    dict(id="tofu", name="된장찌개", cuisine="한식", price_hint=8500,
          search_keyword="두부 덮밥", description="두부와 채소를 밥에 곁들이는 메뉴예요. 실제 재료는 매장 확인이 필요해요.",
          aliases=("두부 채소 덮밥", "두부덮밥")),
     dict(id="noodle", name="짜장면", cuisine="중식", price_hint=8000,

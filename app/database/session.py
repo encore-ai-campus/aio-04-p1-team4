@@ -6,10 +6,21 @@ from collections.abc import Generator
 from pathlib import Path
 
 from fastapi import Request
-from sqlalchemy import Engine, create_engine, event, make_url
+from sqlalchemy import Engine, create_engine, event, make_url, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .models import Base
+
+
+def normalize_database_url(database_url: str):
+    """Supabase의 일반 PostgreSQL URI를 설치된 psycopg 3 드라이버로 연결한다."""
+    value = database_url.strip()
+    if value.startswith("postgres://"):
+        value = "postgresql://" + value[len("postgres://"):]
+    url = make_url(value)
+    if url.drivername == "postgresql":
+        url = url.set(drivername="postgresql+psycopg")
+    return url
 
 
 def _configure_sqlite(dbapi_connection, _connection_record) -> None:
@@ -28,12 +39,24 @@ def _configure_sqlite(dbapi_connection, _connection_record) -> None:
         cursor.close()
 
 
+def _configure_postgres_schema(dbapi_connection, _connection_record, _proxy) -> None:
+    previous = dbapi_connection.autocommit
+    try:
+        dbapi_connection.autocommit = True
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute('SET search_path TO "Lunchrun"')
+    finally:
+        dbapi_connection.autocommit = previous
+
+
 class Database:
     """애플리케이션이 공유할 엔진과 요청별 단기 세션 팩토리를 관리한다."""
 
     def __init__(self, database_url: str):
-        url = make_url(database_url)
+        url = normalize_database_url(database_url)
         connect_args: dict[str, object] = {}
+        if url.get_backend_name() == "postgresql":
+            connect_args["options"] = '-csearch_path="Lunchrun"'
         if url.get_backend_name() == "sqlite":
             # FastAPI의 스레드풀에서도 SQLite 연결을 사용할 수 있게 설정한다.
             connect_args.update(check_same_thread=False, timeout=5)
@@ -50,6 +73,9 @@ class Database:
         )
         if url.get_backend_name() == "sqlite":
             event.listen(self.engine, "connect", _configure_sqlite)
+        elif url.get_backend_name() == "postgresql":
+            self.engine = self.engine.execution_options(schema_translate_map={None: "Lunchrun"})
+            event.listen(self.engine, "checkout", _configure_postgres_schema)
 
         # 세션은 요청이나 작업 단위로 열고 닫으며 엔진만 애플리케이션이 공유한다.
         self.session_factory = sessionmaker(
@@ -62,6 +88,12 @@ class Database:
     def init_schema(self) -> None:
         """누락 테이블을 만들고 기본 메뉴 카탈로그를 중복 없이 준비한다."""
 
+        if self.engine.dialect.name == "postgresql":
+            with self.engine.connect() as connection:
+                revisions = set(connection.scalars(text('SELECT version_num FROM "Lunchrun".alembic_version')))
+                if revisions != {"0004_csv_import_records"}:
+                    raise RuntimeError("Supabase 스키마를 Alembic upgrade head로 준비해주세요.")
+            return
         Base.metadata.create_all(bind=self.engine)
         # import를 함수 안에서 수행해 모델 로딩 중 순환 참조를 피한다.
         from .seed import seed_menu_catalog
@@ -78,4 +110,6 @@ def get_db(request: Request) -> Generator[Session, None, None]:
 
     database: Database = request.app.state.database
     with database.session_factory() as session:
+        if database.engine.dialect.name == "postgresql":
+            session.execute(text("SET TRANSACTION READ ONLY"))
         yield session

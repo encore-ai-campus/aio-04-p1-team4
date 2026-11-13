@@ -17,7 +17,7 @@ from playwright.sync_api import sync_playwright
 from app.database import Database
 from app.main import app
 import games.app as games_proxy
-from test_game_browser_flow import free_port
+from test_game_browser_flow import free_port, select_game
 
 
 def test_location_from_home_to_games_and_reselection(tmp_path, monkeypatch):
@@ -25,6 +25,13 @@ def test_location_from_home_to_games_and_reselection(tmp_path, monkeypatch):
     api_port, node_port = free_port(), free_port()
     api_url, node_url = f"http://127.0.0.1:{api_port}", f"http://127.0.0.1:{node_port}"
     database = Database(f"sqlite:///{(tmp_path / 'locations.db').as_posix()}")
+    database.init_schema()
+    from test_db_first_flow import add_place
+    with database.session_factory.begin() as session:
+        add_place(session, latitude=37.48, longitude=126.88)
+        # 이동한 각 위치에도 실제 DB 상품이 있어야 동일한 후보를 확인할 수 있다.
+        for i, (lat, lng) in enumerate([(37.49,126.89),(37.50,126.89),(37.51,126.91)]):
+            add_place(session, rid=f'relocated-{i}', latitude=lat, longitude=lng)
     monkeypatch.setattr(app.state, 'database', database)
     monkeypatch.setattr(games_proxy, 'NODE_ORIGIN', node_url)
     server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=api_port, log_level='error'))
@@ -80,7 +87,7 @@ def test_location_from_home_to_games_and_reselection(tmp_path, monkeypatch):
             page.locator('#end-hour').fill(str(end.hour % 12 or 12))
             page.locator('#end-minute').fill(str(end.minute))
             page.locator('[data-action="apply-time"]').click()
-            page.locator('[data-action="go:backend-games"]').click()
+            page.locator('#screen [data-action="go:backend-games"]').click()
             page.wait_for_url('**/games/')
             page.wait_for_function("document.querySelector('#candidate-count').textContent === '1개'")
             assert candidates[-1]['location']['lat'] == 37.48
@@ -88,7 +95,9 @@ def test_location_from_home_to_games_and_reselection(tmp_path, monkeypatch):
             assert '서울 현재위치로 1' in page.locator('.location-note').inner_text()
             assert page.locator('#location option').count() == 0
             # Select a menu so changing location must invalidate it.
+            # 선택/실행은 서로 다른 일반 경로다.
             page.locator('[data-mode="solo"]').click()
+            select_game(page, 'gacha')
             page.wait_for_function("document.querySelector('#candidate-count').textContent === '1개'")
             page.locator('[data-action="play"]').click()
             page.locator('[data-action="open-capsule"]').first.click()
@@ -100,18 +109,23 @@ def test_location_from_home_to_games_and_reselection(tmp_path, monkeypatch):
             assert page.locator('.result-title').inner_text() == '짜장면'
             assert page.evaluate('window.LunchRunState.read().conditions.deadline') == before_reload['conditions']['deadline']
             page.go_back()
-            page.wait_for_selector('[data-action="go:backend-games"]')
+            page.wait_for_url('**/games/')
+            page.go_back()
+            page.wait_for_selector('#screen [data-action="go:backend-games"]')
             assert page.locator('#location').get_attribute('title') == '서울 현재위치로 1'
             assert page.locator('[data-action="go:budget"]').inner_text() == '9,000원'
             assert page.evaluate('window.LunchRunState.read().menu.id') == 'noodle'
-            page.locator('[data-action="go:backend-games"]').click()
+            page.locator('#screen [data-action="go:backend-games"]').click()
+            page.wait_for_url('**/games/')
+            assert page.evaluate('LunchRunState.read().menu.id') == 'noodle'
+            page.goto(api_url+'/games/play')
             page.wait_for_selector('.result-title')
             assert page.locator('.result-title').inner_text() == '짜장면'
             page.locator('#location').click()
             page.locator('[data-location-query]').fill('식사 출발점')
             page.locator('[data-location-submit]').click()
             page.locator('.lr-location-result').click()
-            page.wait_for_function("document.querySelector('#location').textContent === '검색한 식사 출발점'")
+            page.wait_for_function("document.querySelector('#location .location-label').textContent === '검색한 식사 출발점'")
             page.wait_for_function("document.querySelector('#candidate-count').textContent === '1개'")
             assert candidates[-1]['location'] == place
             assert page.locator('.result-title').count() == 0
@@ -161,7 +175,7 @@ def test_location_from_home_to_games_and_reselection(tmp_path, monkeypatch):
             page.route('https://dapi.kakao.com/**', lambda route: route.fulfill(content_type='application/javascript', body=(root/'tests/map-sdk-stub.js').read_text(encoding='utf-8')))
             page.locator('[data-action="find"]').click()
             page.wait_for_url('**/map/**')
-            page.wait_for_function("document.querySelector('#search-status').textContent.includes('검증 중')")
+            page.wait_for_function("document.querySelector('#search-status').textContent.includes('DB에서')")
             page.goto(api_url)
             assert page.evaluate("sessionStorage.getItem('test:search-aborted')") == 'yes'
             assert page.evaluate('window.LunchRunState.read().menu.id') == 'noodle'

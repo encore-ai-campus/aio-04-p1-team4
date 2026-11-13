@@ -5,8 +5,34 @@ const demoRestaurants=[{id:'demo-a',name:'점심식당',menu:'김치찌개',pric
 
 const $=s=>document.querySelector(s),state={budget:5000,remaining_minutes:50,distance_m:500,people:1,category:'전체',origin:null,end_time:'12:30',participant_menus:[],game:null,menu:null,restaurants:[],selected:null,route:null,context:''};
 const shared=typeof window!=='undefined'?window.LunchRunState:null;
+const HOME_PATHS={conditions:'/',ai:'/ai',budget:'/budget',time:'/time','end-time':'/time',distance:'/distance',people:'/people','group-input':'/group-input',play:'/play',result:'/result'};
+function routeName(){const path=location.pathname.replace(/\/+$/,'')||'/';return Object.keys(HOME_PATHS).find(key=>HOME_PATHS[key]===path)||'conditions';}
+function routePath(name){return HOME_PATHS[name]||'/';}
+// 이전 북마크는 일반 주소로 정리하며 화면 판정에는 pathname만 사용한다.
+function normalizeLegacyRoute(){
+ const name=location.hash.slice(1);
+ if(['games','restaurants','route'].includes(name)){location.replace((name==='games'?'/games/':'/map/')+location.search);return;}
+ if(Object.hasOwn(HOME_PATHS,name))history.replaceState(null,'',routePath(name)+location.search);
+}
 let requestVersion=0,requestController=null;
-function cancelRequests(){requestVersion++;requestController?.abort();requestController=null;busy=false;}
+let previewVersion=0,previewController=null,previewTimer=null;
+
+function refreshHomeCandidates(){
+ clearTimeout(previewTimer);previewController?.abort();const version=++previewVersion;
+ const panel=document.querySelector('#db-menu-preview');if(!panel)return;
+ let body;try{body=payload();body.menu_id=null;}catch(e){panel.textContent=e.message;return;}
+ panel.textContent='DB에서 메뉴·표시 가격·식당 수 확인 중…';
+ const revision=shared?.read().contextRevision;
+ previewTimer=setTimeout(async()=>{
+  const controller=new AbortController();previewController=controller;
+  try{
+   const data=await request('/api/menus/candidates',body,{signal:controller.signal});
+   if(version!==previewVersion||revision!==shared?.read().contextRevision||!panel.isConnected)return;
+   panel.textContent=data.menus.length?data.menus.map(m=>`${m.name} ${m.verified_price.toLocaleString()}~${m.verified_price_max.toLocaleString()}원 · ${m.nearby_restaurant_count}곳${m.serving_unverified?' · 인분 미확인':''}`).join(' / '):'현재 위치·예산·영업 조건에 맞는 DB 메뉴가 없습니다.';
+  }catch(e){if(version===previewVersion&&panel.isConnected&&!controller.signal.aborted)panel.textContent=e.message;}
+ },180);
+}
+function cancelRequests(){clearTimeout(previewTimer);previewController?.abort();previewVersion++;requestVersion++;requestController?.abort();requestController=null;busy=false;}
 function clockFromDeadline(deadline){return new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(deadline));}
 function clockDeadline(){const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date()).split(':').map(Number);const [h,m]=state.end_time.split(':').map(Number);return Math.floor(Date.now()/60000)*60000+(h*60+m-parts[0]*60-parts[1])*60000;}
 function saveHome(){
@@ -34,7 +60,7 @@ function payload(){
 function invalidate(){cancelRequests();state.menu=null;state.menuId=null;state.candidateRestaurants=[];state.restaurants=[];state.selected=null;state.route=null;saveHome();shared?.setMenu(null);}
 function go(r,gameSource=null){
  if(r==='restaurants'||r==='route'){saveHome();location.assign('/games/');return;}
- if(r==='backend-games'){
+ if(r==='backend-games'||r==='games'){
   try{
    payload();
    saveHome();
@@ -45,24 +71,28 @@ function go(r,gameSource=null){
   location.assign('/games/');return;
  }
  if(["games","group-input","play"].includes(r)&&state.people>12){$("#status").textContent="12명 초과시 게임추천 서비스는 사용 할 수 없습니다.";return;}
- const current=location.hash.slice(1)||'conditions';
+ const current=routeName();
  const expands=current==='conditions'&&['budget','time','distance','people'].includes(r);
  const source=gameSource||(expands?document.querySelector('[data-action="go:'+r+'"]'):null);
  const transitionName=gameSource?'game-expand':'condition-expand';
  const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
  if(source&&!reduce){
   const from=source.getBoundingClientRect();
-  const commit=()=>{history.pushState(null,'','#'+r);render();window.scrollTo(0,0);};
+  const commit=()=>{history.pushState(null,'',routePath(r));render();window.scrollTo(0,0);};
   if(document.startViewTransition){source.style.viewTransitionName=transitionName;const t=document.startViewTransition(commit);t.finished.catch(()=>{});}
   else {commit();const target=document.querySelector(gameSource?'.result':'.setting .value');if(target){const to=target.getBoundingClientRect();target.animate([{transformOrigin:'top left',transform:'translate('+(from.left-to.left)+'px,'+(from.top-to.top)+'px) scale('+from.width/to.width+','+from.height/to.height+')'},{transformOrigin:'top left',transform:'none'}],{duration:420,easing:'cubic-bezier(.2,.75,.25,1)'});}}
   return;
  }
- history.pushState(null,'','#'+r);render();window.scrollTo(0,0);
+ history.pushState(null,'',routePath(r));render();window.scrollTo(0,0);
 }
 
 async function run(fn){if(busy)return;busy=true;const version=++requestVersion;requestController=new AbortController();$('#status').textContent='처리 중…';try{await fn(version,requestController.signal);if(version===requestVersion)$('#status').textContent='';}catch(e){if(version===requestVersion)$('#status').textContent=e.name==='AbortError'?'요청 시간이 초과되었습니다. 다시 시도해주세요.':e.message;}finally{if(version===requestVersion)busy=false;}}
-function render(){saveHome();const r=location.hash.slice(1)||'conditions';const app=document.querySelector('.app'),previous=app.dataset.view;app.dataset.view=r;if(r!=='games')$('#dock').classList.remove('dock-enter');else if(previous!=='games')$('#dock').classList.add('dock-enter');let stage=['conditions','budget','time','end-time','people','distance'].includes(r)?0:r==='restaurants'?2:r==='route'?3:1;$('#dock').innerHTML=stages.map((s,i)=>button(s,'go:'+routes[i],i===stage?'active':'')).join('');$('#summary').textContent=stage?`${state.budget.toLocaleString()}원 / ${remainingLunch()}분 남음 / ${state.distance_m}m / ${state.people}명${' / '+state.category}`:'';let title='오늘 점심, 어떻게 고를까요?',html='';
-if(r==='conditions'){html='<div class="grid">'+[['예산설정','budget',state.budget.toLocaleString()+'원'],['남은시간','time',remainingLunch()+'분'],['거리설정','distance',state.distance_m+'m'],['인원 수 설정','people',state.people+'명']].map(([l,p,v])=>`<div class="field">${l}${button(v,'go:'+p,'card')}</div>`).join('')+'</div><p class="category-label">음식 카테고리</p><div class="chips">'+foodTypes.map(c=>`<button data-category="${c}" class="${c===state.category?'active':''}">${c}</button>`).join('')+'</div><p class="notice">선택한 음식 종류는 다인 게임에도 동일하게 적용됩니다.</p><div class="actions">'+(state.people>12?'<button class="primary" disabled>게임으로 메뉴 고르기</button>':button('게임으로 메뉴 고르기','go:backend-games','primary'))+button('AI에게 추천받기','go:ai')+'</div>';}
+function renderNavigation(route,stage){
+ const items=[['조건 설정','conditions',stage===0],['AI 추천','ai',route==='ai'],['게임 선택','backend-games',stage===1&&route!=='ai'],['식당 선택','restaurants',stage===2],['경로 확인','route',stage===3]];
+ $('#dock').innerHTML=items.map(([label,target,active])=>button(label,'go:'+target,active?'active':'')).join('');
+}
+function render(){saveHome();const r=routeName();const app=document.querySelector('.app'),previous=app.dataset.view;app.dataset.view=r;if(r!=='games')$('#dock').classList.remove('dock-enter');else if(previous!=='games')$('#dock').classList.add('dock-enter');let stage=['conditions','budget','time','end-time','people','distance'].includes(r)?0:r==='restaurants'?2:r==='route'?3:1;renderNavigation(r,stage);$('#summary').textContent=stage?`${state.budget.toLocaleString()}원 / ${remainingLunch()}분 남음 / ${state.distance_m}m / ${state.people}명${' / '+state.category}`:'';let title='오늘 점심, 어떻게 고를까요?',html='';
+if(r==='conditions'){html='<div class="grid">'+[['예산설정','budget',state.budget.toLocaleString()+'원'],['남은시간','time',remainingLunch()+'분'],['거리설정','distance',state.distance_m+'m'],['인원 수 설정','people',state.people+'명']].map(([l,p,v])=>`<div class="field">${l}${button(v,'go:'+p,'card')}</div>`).join('')+'</div><p class="category-label">음식 카테고리</p><div class="chips">'+foodTypes.map(c=>`<button data-category="${c}" class="${c===state.category?'active':''}">${c}</button>`).join('')+'</div><p class="notice db-menu-preview" id="db-menu-preview" role="status">DB 메뉴와 표시 가격을 확인합니다.</p><div class="actions">'+(state.people>12?'<button class="primary" disabled>게임으로 메뉴 고르기</button>':button('게임으로 메뉴 고르기','go:backend-games','primary'))+button('AI에게 추천받기','go:ai')+'</div>';}
 else if(r==='budget'){html='<div class="setting"><p>예산설정</p><div class="value">'+button('−','money:-1000')+'<label class="money-field"><input id="budget-input" aria-label="예산 금액" inputmode="numeric" type="text" value="'+state.budget.toLocaleString('ko-KR')+'" autocomplete="off"><span>원</span></label>'+button('+','money:1000')+'</div></div><div class="actions">'+button('적용','apply-budget','primary')+'</div>';}
 else if(r==='time'||r==='end-time'){const [hour,minute]=state.end_time.split(':').map(Number);html='<div class="setting"><p>점심 종료 시간</p><div class="value time-value">'+button('−','clock:-10')+'<div class="time-fields"><select id="period" aria-label="오전 오후"><option value="AM" '+(hour<12?'selected':'')+'>AM</option><option value="PM" '+(hour>=12?'selected':'')+'>PM</option></select><label><input id="end-hour" aria-label="종료 시" type="number" min="1" max="12" value="'+(hour%12||12)+'"><span>시</span></label><label><input id="end-minute" aria-label="종료 분" type="number" min="0" max="59" value="'+String(minute).padStart(2,'0')+'"><span>분</span></label></div>'+button('+','clock:10')+'</div><p class="input-hint">− / + 버튼으로 10분씩 조정합니다.</p></div><div class="actions">'+button('적용','apply-time','primary')+'</div>';}
 else if(r==='people'){html='<div class="setting"><p>인원 수 설정</p><div class="value">'+button('−','people-step:-1')+'<label class="people-field"><input id="people-input" aria-label="인원 수" aria-describedby="people-warning" type="number" min="1" step="1" value="'+state.people+'"><span>명</span></label>'+button('+','people-step:1')+'</div><p id="people-warning" class="people-warning" role="status" '+(state.people>12?'':'hidden')+'>12명 초과시 게임추천 서비스는 사용 할 수 없습니다.</p></div><div class="actions">'+button('적용','apply-people','primary')+'</div>';}
@@ -74,7 +104,7 @@ else if(r==='ai'){title='지금 나에게 맞는 메뉴';html='<div id="home-cha
 else if(r==='result'){title='오늘의 점심 메뉴';html=`<div class="card result">${escape(state.menu||'아직 결정된 메뉴가 없습니다.')}</div><p>식당은 다음 단계에서 선택합니다.</p><div class="actions">${button('한번더',state.game?'draw':'recommend')}${button('OK · 식당 탐색','find','primary')}</div>`;}
 else if(r==='restaurants'){if(demo&&!state.restaurants.length){state.menu||='김치찌개';state.restaurants=demoRestaurants;}title='이 메뉴를 먹을 수 있는 곳';html='<div class="restaurant-layout"><div class="restaurant-list">'+state.restaurants.map(x=>'<button class="card restaurant-card '+(state.selected?.id===x.id?'selected':'')+'" data-restaurant="'+escape(x.id)+'"><strong>'+escape(x.name)+'</strong>'+escape(state.menu)+' '+(typeof x.price==='number'?escape(x.price):'미확인')+'원<span>'+escape(x.distance_m)+'m · '+(x.walk_minutes==null?'도보 시간 미확인':'도보 '+escape(x.walk_minutes)+'분')+'</span></button>').join('')+'</div><figure class="map-preview"><img src="assets/restaurants.png" alt="예시 식당 지도"><figcaption>예시 지도 · 실제 위치와 무관</figcaption></figure></div><div class="actions">'+button('식당 랜덤','random')+button('OK · 경로 확인','route','primary')+'</div>';if(!state.restaurants.length)html='<p>후보가 없습니다. 조건을 변경해주세요.</p>'+button('식당 검색','find');}
 else if(r==='route'){if(demo&&!state.route){state.selected=demoRestaurants[0];state.route={distance_m:450,walk_minutes:7};}title='선택한 식당으로 출발';html=state.route?'<div class="map"><div class="card route-summary"><strong>총소요예상 '+escape(state.route.walk_minutes)+'분　│　총거리 '+escape(state.route.distance_m)+'m</strong><p>현재 위치 → '+escape(state.selected?.name)+' / 편도 도보 예상 · 예시</p></div><img src="assets/route.png" alt="도보 경로 예시"><button class="route-back" data-action="go:restaurants">다른 식당 선택</button></div><p class="route-note">대기·식사·왕복 시간 포함 여부는 미확정입니다.</p>':'<p>식당을 먼저 선택해주세요.</p>'+button('식당 선택','go:restaurants');}
-else{html=button('조건 설정으로','go:conditions');}$('#title').textContent=title;$('#screen').innerHTML=html;if(r==='ai')window.LunchRunChat.mount($('#home-chat'),{onState:()=>{restoreHome();$('#summary').textContent=state.budget.toLocaleString()+'원 / '+remainingLunch()+'분 남음 / '+state.distance_m+'m / '+state.people+'명 / '+state.category;}});else window.LunchRunChat.close();fitBudgetWidth();const expanded=document.querySelector('.setting .value');if(expanded)expanded.style.viewTransitionName='condition-expand';
+else{html=button('조건 설정으로','go:conditions');}$('#title').textContent=title;$('#screen').innerHTML=html;refreshHomeCandidates();if(r==='ai')window.LunchRunChat.mount($('#home-chat'),{onState:()=>{restoreHome();$('#summary').textContent=state.budget.toLocaleString()+'원 / '+remainingLunch()+'분 남음 / '+state.distance_m+'m / '+state.people+'명 / '+state.category;}});else window.LunchRunChat.close();window.LunchRunMotion?.enter($('#screen'),r);fitBudgetWidth();const expanded=document.querySelector('.setting .value');if(expanded)expanded.style.viewTransitionName='condition-expand';
 const icons={'전체':'M3 17h26M5 16a11 11 0 0 1 22 0M14 3h4M16 3v3','한식':'M4 14h24c0 8-5 13-12 13S4 22 4 14M8 10l2-4m6 4V5m6 5 2-4','일식':'M4 20c0-9 24-13 24-3v6H4ZM10 15l3 7m4-10 3 9','중식':'M4 16h24c0 8-5 12-12 12S4 24 4 16M9 11c-5-5 5-5 0-10m7 10c-5-5 5-5 0-10m7 10c-5-5 5-5 0-10','양식':'M8 3v12m-4-12v8c0 5 8 5 8 0V3M8 15v14M24 3c-8 5-8 13 0 13V3v26','샐러드':'M4 17h24c-1 7-5 11-12 11S5 24 4 17M16 16C4 16 6 3 10 6c4 2 6 6 6 10Zm0 0c0-12 9-13 10-10-1 5-4 8-10 10Z'};
 document.querySelectorAll('[data-category]').forEach(b=>b.insertAdjacentHTML('afterbegin','<svg class="food-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="'+(icons[b.dataset.category==='일식/회'?'일식':b.dataset.category]||icons['전체'])+'"/></svg>'));
 
@@ -92,17 +122,11 @@ $('#location').onclick=()=>window.LunchRunLocationPicker.open(item=>{
  invalidate();$('#location span').textContent=item.name;$('#location').title=item.address;
  $('#status').textContent='출발 위치를 설정했어요: '+(item.address||item.name);
 },state.selectedLocation);
-window.addEventListener('hashchange',()=>{cancelRequests();window.LunchRunLocationPicker.close();});
+window.addEventListener('hashchange',()=>{normalizeLegacyRoute();cancelRequests();window.LunchRunLocationPicker.close();restoreHome();render();});
 
-window.addEventListener('hashchange',render);restoreHome();render();configure().then(v=>{demo=v;$('#mode').textContent=demo?'':'백엔드 연결 모드';render();}).catch(e=>{$('#mode').textContent='설정 확인 전 · 시안 미리보기';$('#status').textContent=e.message;});
+normalizeLegacyRoute();restoreHome();render();configure().then(v=>{demo=v;$('#mode').textContent=demo?'':'백엔드 연결 모드';render();}).catch(e=>{$('#mode').textContent='설정 확인 전 · 시안 미리보기';$('#status').textContent=e.message;});
 
-const sceneOptions=[['conditions','조건 설정'],['budget','예산 설정'],['end-time','종료 시간 설정'],['people','인원 설정'],['distance','거리 설정'],['games','혼자 게임 선택'],['draw','제비뽑기'],['gacha','가챠'],['ticket','행운권'],['random','랜덤게임'],['group-games','다인 게임 선택'],['group-input','참가자 메뉴 입력'],['roulette','룰렛'],['ladder','사다리'],['ai','AI 입력'],['result','메뉴 결과'],['restaurants','식당 선택'],['route','경로 확인']];
-const referenceFiles=["01-conditions.png","02-budget.png","03-end-time.png","04-people.png","05-distance.png","06-solo-games.png","07-draw.png","08-gacha.png","09-ticket.png","10-random-game.png","11-group-games.png","12-group-input.png","13-roulette.png","14-ladder.png","15-ai-input.png","16-menu-result.png","17-restaurants.png","18-route.png"];
-$('#scene').innerHTML=sceneOptions.map(([key,label],i)=>'<option value="'+i+'">'+String(i+1).padStart(2,'0')+' · '+label+'</option>').join('');
-$('#scene').onchange=()=>{const i=Number($('#scene').value),key=sceneOptions[i][0];$('#reference').href='assets/screens/'+referenceFiles[i];
-if(['draw','gacha','ticket','random','roulette','ladder'].includes(key)){state.game={draw:'제비뽑기',gacha:'가챠',ticket:'행운권 뽑기',random:'랜덤게임',roulette:'룰렛',ladder:'사다리'}[key];state.people=i>=12?4:1;go('play');}
-else if(key==='group-games'){state.people=4;go('games');}else{if(key==='games')state.people=1;if(key==='group-input'){state.people=4;state.participant_menus=['피자','김치찌개','짜장면','볶음밥'];}if(key==='result'&&demo)state.menu='김치찌개';go(key);}};
-$('#account').onclick=()=>{const d=document.createElement('dialog');d.innerHTML='<h2>로그인 화면 예시</h2><p>인증 API 연결 전입니다. 입력하거나 전송하지 않습니다.</p><label>이메일<input type="email" placeholder="이메일" disabled></label><label>비밀번호<input type="password" placeholder="비밀번호" disabled></label><p>회원·비회원 모두 서비스 이용 가능</p><button>닫기</button>';document.body.appendChild(d);d.querySelector('button').onclick=()=>{d.close();d.remove();};d.showModal();};
+$('#account').onclick=()=>window.LunchRunProfile.open();
 
 function fitCanvas(){document.documentElement.style.setProperty('--scale',Math.min(1,window.innerWidth/1516,window.innerHeight/1038));}window.addEventListener('resize',fitCanvas);fitCanvas();
 
@@ -123,4 +147,4 @@ document.addEventListener('focusout',e=>{if(e.target.id==='people-input')commitP
 
 window.addEventListener('pagehide',()=>{saveHome();cancelRequests();window.LunchRunLocationPicker.close();});
 window.addEventListener('pageshow',event=>{if(event.persisted){cancelRequests();restoreHome();render();}});
-window.addEventListener('popstate',()=>{cancelRequests();restoreHome();render();});
+window.addEventListener('popstate',()=>{normalizeLegacyRoute();cancelRequests();window.LunchRunLocationPicker.close();restoreHome();render();});

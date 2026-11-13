@@ -1,63 +1,213 @@
 <!doctype html>
 <html lang="ko">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#FFFFFF">
-  <meta name="description" content="점심 고민은 짧게, 게임은 재밌게. 조건에 맞는 메뉴를 뽑고 식당까지 찾아보는 LUNCH RUN 데모 2.">
-  <title>LUNCH RUN · 데모 3 우리의 교집합</title>
-  <script>if(/^\d{6}$/.test(new URLSearchParams(location.search).get('room')||''))document.documentElement.classList.add('room-invite-page');</script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css">
-  <link rel="stylesheet" href="./white-preview.css">
-<link rel="stylesheet" href="./data-layout.css"><link rel="stylesheet" href="./rooms.css"></head>
-<body class="theme-white">
-  <a class="skip" href="#main">본문으로 이동</a>
-  <header class="topbar">
-    <a class="brand" href="./" aria-label="런치런 홈"><span class="brand-icon">↗</span><span>LUNCH<span class="brand-run">RUN</span><small>MAKE YOUR LUNCH A LITTLE MORE FUN</small></span></a>
-    <nav class="main-nav" aria-label="메인 메뉴">
-      <button class="nav-item active" data-view="game"><span>◈</span> 메뉴 플레이</button>
-      <button class="nav-item" data-view="restaurants"><span>⌖</span> 식당 찾기</button>
-      <button class="nav-item" data-view="saved"><span>♡</span> 나의 취향 <span id="saved-count" class="count-dot">0</span></button>
-    </nav>
-    <div class="header-end"><span class="version">DEMO 03</span><button class="profile-btn" id="profile-btn"><span class="avatar">G</span><span id="profile-label">게스트</span><span>⌄</span></button></div>
-  </header>
-  <div class="app-shell">
-    <aside class="sidebar" aria-label="점심 추천 조건">
-      <div class="sidebar-title"><div><span class="eyebrow">YOUR LUNCH, YOUR RULES</span><h2>오늘의 점심 조건</h2></div><button id="reset-filters" class="icon-btn" aria-label="추천 조건 초기화" title="조건 초기화">↻</button></div>
-      <div class="location-box"><span>⌖</span><div><small>어디에서 출발하나요?</small><label class="sr-only" for="location">탐색 기준 위치</label><button id="location" type="button" aria-label="출발 위치 설정">위치 설정</button></div><span class="location-dot"></span></div>
-      <p class="micro location-note">현재 위치 또는 주소·장소 검색으로 출발점을 선택하세요.</p>
-      <form id="filters-form">
-        <div class="filter-group"><label for="budget">한 끼 예산 <span>1인 기준</span></label><div class="range-value"><strong id="budget-value">12,000</strong><span>원 이하</span></div><input id="budget" type="range" min="5000" max="20000" step="1000" value="12000"><div class="range-ends"><span>5,000원</span><span>20,000원</span></div></div>
-        <div class="filter-group"><label for="lunch-time">남은 점심시간</label><div class="range-value"><strong id="time-value">45</strong><span>분</span></div><input id="lunch-time" type="range" min="1" max="120" step="1" value="45"><div id="time-options" hidden></div></div>
-        <div class="filter-group"><label for="distance">최대 이동 거리 <span>직선 반경</span></label><div class="range-value"><strong id="distance-value">500</strong><span>m 이내</span></div><input id="distance" type="range" min="50" max="500" step="50" value="500"></div>
-        <div class="filter-group"><label>음식 카테고리 <span>한 가지 선택</span></label><div class="category-grid" id="category-options"><button type="button" class="category active" data-category="전체"><span>✳</span> 전체</button><button type="button" class="category" data-category="한식"><span>🍚</span> 한식</button><button type="button" class="category" data-category="일식"><span>🍣</span> 일식</button><button type="button" class="category" data-category="중식"><span>🥟</span> 중식</button><button type="button" class="category" data-category="양식"><span>🍝</span> 양식</button><button type="button" class="category" data-category="분식"><span>🍢</span> 분식</button><button type="button" class="category" data-category="아시안"><span>🍜</span> 아시안</button><button type="button" class="category" data-category="샐러드"><span>🥗</span> 샐러드</button></div></div>
-        <div class="filter-group people-group"><label>함께 먹는 인원 <span id="people-hint">혼자도 좋아요</span></label><div class="stepper"><button type="button" id="people-minus" aria-label="인원 줄이기">−</button><strong><span id="people-count">1</span><small>명</small></strong><button type="button" id="people-plus" aria-label="인원 늘리기">+</button></div></div>
-      </form>
-      <div class="filter-summary"><span class="live-dot"></span> 조건에 맞는 메뉴 <strong id="candidate-count">0개</strong></div>
-      <button class="primary sidebar-cta" id="quick-pick">✦ 빠르게 추천받기 <span>↗</span></button>
-      <div class="sidebar-foot"><span>◷</span><p>고민하는 시간은 줄이고,<br>점심시간은 더 여유롭게.</p></div>
-    </aside>
-    <main id="main" tabindex="-1">
-      <div class="progress-bar" aria-label="추천 진행 단계"><span class="progress-step active" data-step="1"><b>01</b> 메뉴 결정</span><i></i><span class="progress-step" data-step="2"><b>02</b> 식당 탐색</span><i></i><span class="progress-step" data-step="3"><b>03</b> 맛있는 출발</span><span class="progress-note">A GOOD LUNCH STARTS HERE ↗</span></div>
-      <section id="view-game" class="view">
-        <div class="double-draw-banner"><span class="eyebrow">TWO PICKS, ONE LUNCH</span><h2>메뉴도 한 번, 식당도 한 번 뽑는 점메추</h2><p>설정한 조건의 메뉴를 뽑고, 검증된 주변 식당도 한 번 더 골라보세요.</p><div id="decision-steps" class="decision-steps" aria-label="두 단계 점심 추첨 흐름"><span class="is-current"><b>01</b><small>조건별 메뉴 후보</small></span><span><b>02</b><small>메뉴 추첨</small></span><span><b>03</b><small>주변 식당</small></span><span><b>04</b><small>식당 추첨</small></span><span><b>05</b><small>길찾기</small></span></div></div>
-        <div class="hero"><div><div class="hero-kicker"><span class="live-dot"></span> SMALL GAME. GREAT LUNCH.</div><h1>오늘 점심,<br><span>운명에 맡겨볼까요?</span><span class="sparkle">✳</span></h1><p>늘 먹던 메뉴는 잠깐 잊고, 오늘의 맛있는 우연을 만나보세요.</p></div><div class="hero-sticker"><span>LESS<br>THINKING.</span><strong>MORE<br>LUNCH!</strong><i>↗</i></div></div>
-        <div class="play-heading"><div><span class="section-index">01 / PLAY</span><h2>어떻게 골라볼까요?</h2></div><div class="mode-tabs" aria-label="추천 방식"><button class="active" data-mode="solo">혼자 골라요</button><button data-mode="group">함께 골라요</button><button data-mode="ai">✦ AI에게 물어봐요</button></div></div>
-        <div id="game-options" class="game-options"></div>
-        <div id="group-settings" class="group-settings" hidden></div>
-        <div class="play-layout"><section class="play-board" aria-label="메뉴 결정 게임"><div class="board-top"><span id="game-badge">CAPSULE PICK</span><span id="board-status"><i class="live-dot"></i> READY TO PLAY</span></div><div id="game-stage" class="game-stage"><p class="room-loading" role="status">초대받은 모임방을 불러오고 있어요…</p></div><div id="game-actions" class="game-actions"></div><p id="game-footnote" class="game-footnote">조건에 맞는 메뉴만 담았어요. 마음 편히 뽑아보세요!</p></section><aside class="pool-panel" hidden><div class="pool-title"><span class="small-icon">▦</span><h3>오늘의 메뉴 풀</h3><span id="pool-count">0</span></div><p class="pool-subtitle">이 중에서 오늘의 점심이 정해져요</p><div id="menu-pool" class="menu-pool"></div><div class="pool-bottom"><span>✦</span><p>취향은 존중하고, 선택은 가볍게.<br><strong>선택한 조건 안에서 공평하게 뽑아요.</strong></p></div></aside></div>
-        <section class="suggestions" hidden><div class="section-title"><div><span class="section-index">A LITTLE INSPIRATION</span><h2>이런 점심은 어때요?</h2></div><button class="text-btn" id="all-menus">전체 메뉴 보기 ↗</button></div><div class="suggestion-grid" id="suggestion-grid"></div></section>
-      </section>
-      <section id="view-restaurants" class="view" hidden></section>
-      <section id="view-saved" class="view" hidden></section>
-      <footer class="main-footer"><span class="footer-wordmark">LUNCHRUN<span>↗</span></span><p>메뉴 후보는 백엔드의 예산·음식 종류 기준입니다.<br>실제 가격·영업 여부는 식당 찾기를 눌러 확인합니다.</p><span>MADE FOR YOUR LUNCH BREAK · DEMO 03</span></footer>
-    </main>
-  </div>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <dialog id="app-dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div><button class="dialog-close icon-btn" id="close-dialog" aria-label="창 닫기">×</button></dialog>
-  <link rel="stylesheet" href="/static/location-picker.css"><script defer src="/static/state.js"></script><script defer src="/static/location.js"></script><script defer src="/static/location-picker.js"></script><link rel="stylesheet" href="/static/chat.css"><script defer src="/static/chat.js?v=2"></script><script type="module" src="./app.mjs"></script>
-</body>
+  <head>
+    <base href="/games/" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#FFFFFF" />
+    <meta
+      name="description"
+      content="점심 고민은 짧게, 게임은 재밌게. 조건에 맞는 메뉴를 뽑고 식당까지 찾아보는 LUNCH RUN 데모 2."
+    />
+    <title>LUNCH RUN · 메뉴 플레이</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css?v=20261112-result-text" />
+    <link rel="stylesheet" href="./white-preview.css" />
+    <link rel="stylesheet" href="./data-layout.css" />
+    <link rel="stylesheet" href="./minimal-ui.css" />
+    <link
+      rel="stylesheet"
+      href="/assets/shared-header.css?v=20261112-stable-header"
+    />
+    <link rel="modulepreload" href="./engine.mjs" />
+    <link
+      rel="stylesheet"
+      href="/assets/profile-dialog.css?v=20261112-profile"
+    />
+    <script src="/assets/profile-dialog.js?v=20261112-profile"></script>
+  </head>
+  <body class="theme-white" data-game-screen="select">
+
+    <a class="skip" href="#main">본문으로 이동</a>
+    <header class="site-header topbar">
+      <a class="brand" href="/" aria-label="런치런 홈"
+        ><img src="./assets/logo.svg" alt="LUNCH RUN"
+      /></a>
+      <nav class="header-tools" aria-label="계정과 설정">
+        <button type="button" id="location" data-shell="conditions">
+          <svg class="location-icon" viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16 29s10-11 10-18a10 10 0 0 0-20 0c0 7 10 18 10 18Z" />
+            <circle cx="16" cy="11" r="4" /></svg
+          ><span class="location-label">위치</span>
+        </button>
+        <button
+          type="button"
+          class="nav-item"
+          data-view="saved"
+          data-member-only
+          hidden
+        >
+          나의 취향 <span id="saved-count">0</span>
+        </button>
+        <button type="button" class="profile-btn" id="profile-btn">
+          <span class="avatar" aria-hidden="true">G</span
+          ><span id="profile-label" class="profile-label">게스트</span>
+        </button>
+      </nav>
+    </header>
+    <div class="app-shell">
+      <main id="main" tabindex="-1">
+        <div class="progress-bar" aria-label="추천 진행 단계">
+          <span class="progress-step active" data-step="1"
+            ><b>01</b> 메뉴 결정</span
+          ><i></i
+          ><span class="progress-step" data-step="2"><b>02</b> 식당 탐색</span
+          ><i></i
+          ><span class="progress-step" data-step="3"><b>03</b> 맛있는 출발</span
+          ><span class="progress-note">A GOOD LUNCH STARTS HERE ↗</span>
+        </div>
+        <section id="view-game" class="view">
+          <div class="game-page-heading">
+            <h1 id="game-page-title" tabindex="-1">혼자서 가볍게 골라요</h1>
+            <p id="conditions-summary" class="location-note"></p>
+          </div>
+          <div class="double-draw-banner">
+            <span class="eyebrow">TWO PICKS, ONE LUNCH</span>
+            <h2>메뉴도 한 번, 식당도 한 번 뽑는 점메추</h2>
+            <p>
+              AI가 후보를 모으면 메뉴를 뽑고, 근처 식당도 한 번 더. 고민은 두
+              번의 플레이로 끝내요.
+            </p>
+            <div
+              id="decision-steps"
+              class="decision-steps"
+              aria-label="두 단계 점심 추첨 흐름"
+            >
+              <span class="is-current"
+                ><b>01</b><small>AI 메뉴 후보</small></span
+              ><span><b>02</b><small>메뉴 추첨</small></span
+              ><span><b>03</b><small>주변 식당</small></span
+              ><span><b>04</b><small>식당 추첨</small></span
+              ><span><b>05</b><small>길찾기</small></span>
+            </div>
+          </div>
+          <div class="hero">
+            <div>
+              <div class="hero-kicker">
+                <span class="live-dot"></span> SMALL GAME. GREAT LUNCH.
+              </div>
+              <h1>
+                오늘 점심,<br /><span>운명에 맡겨볼까요?</span
+                ><span class="sparkle">✳</span>
+              </h1>
+              <p>늘 먹던 메뉴는 잠깐 잊고, 오늘의 맛있는 우연을 만나보세요.</p>
+            </div>
+            <div class="hero-sticker">
+              <span>LESS<br />THINKING.</span><strong>MORE<br />LUNCH!</strong
+              ><i>↗</i>
+            </div>
+          </div>
+          <div class="play-heading">
+            <div>
+              <span class="section-index">01 / PLAY</span>
+              <h2>어떻게 골라볼까요?</h2>
+            </div>
+            <div class="mode-tabs" aria-label="추천 방식">
+              <button class="active" data-mode="solo">혼자 골라요</button
+              ><button data-mode="group">함께 골라요</button>
+            </div>
+          </div>
+          <div id="game-options" class="game-options"></div>
+          <div id="group-settings" class="group-settings" hidden></div>
+          <div class="play-layout">
+            <section class="play-board" aria-label="메뉴 결정 게임">
+              <div class="board-top">
+                <span id="game-badge">CAPSULE PICK</span
+                ><span id="board-status"
+                  ><i class="live-dot"></i> READY TO PLAY</span
+                >
+              </div>
+              <div id="game-stage" class="game-stage">
+                <p role="status">게임을 준비하고 있어요…</p>
+              </div>
+              <div id="game-actions" class="game-actions"></div>
+              <p id="game-footnote" class="game-footnote">
+                조건에 맞는 메뉴만 담았어요. 마음 편히 뽑아보세요!
+              </p>
+            </section>
+            <aside class="pool-panel" hidden>
+              <div class="pool-title">
+                <span class="small-icon">▦</span>
+                <h3>오늘의 메뉴 풀</h3>
+                <span id="pool-count">0</span>
+              </div>
+              <p class="pool-subtitle">이 중에서 오늘의 점심이 정해져요</p>
+              <p class="db-candidate-note">DB 후보 <span id="candidate-count">0개</span></p>
+              <div id="menu-pool" class="menu-pool"></div>
+              <div class="pool-bottom">
+                <span>✦</span>
+                <p>
+                  취향은 존중하고, 선택은 가볍게.<br /><strong
+                    >선택한 조건 안에서 공평하게 뽑아요.</strong
+                  >
+                </p>
+              </div>
+            </aside>
+          </div>
+          <section class="suggestions" hidden>
+            <div class="section-title">
+              <div>
+                <span class="section-index">A LITTLE INSPIRATION</span>
+                <h2>이런 점심은 어때요?</h2>
+              </div>
+              <button class="text-btn" id="all-menus">전체 메뉴 보기 ↗</button>
+            </div>
+            <div class="suggestion-grid" id="suggestion-grid"></div>
+          </section>
+        </section>
+        <section id="view-restaurants" class="view" hidden></section>
+        <section id="view-saved" class="view" hidden></section>
+        <nav class="stage-dock" aria-label="진행 단계">
+          <button type="button" data-shell="home">조건 설정</button>
+          <button type="button" data-shell="ai">AI 추천</button>
+          <button type="button" data-shell="game">게임 선택</button>
+          <button type="button" data-shell="restaurants">식당 선택</button>
+          <button type="button" data-shell="route">경로 확인</button>
+        </nav>
+
+        <footer class="main-footer">
+          <span class="footer-wordmark">LUNCHRUN<span>↗</span></span>
+          <p>
+            메뉴·가격·영업시간은 DB 표시 정보 기준입니다.<br />인분 미확인 상품은 표시 가격으로 비교하며 실제 매장 상황은 달라질 수 있습니다.
+          </p>
+          <span>MADE FOR YOUR LUNCH BREAK · DEMO 03</span>
+        </footer>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <dialog id="app-dialog" aria-labelledby="dialog-title">
+      <div id="dialog-content"></div>
+      <button
+        class="dialog-close icon-btn"
+        id="close-dialog"
+        aria-label="창 닫기"
+      >
+        ×
+      </button>
+    </dialog>
+    <script src="/assets/screen-motion.js?v=20261112-motion"></script>
+    <link rel="stylesheet" href="/static/location-picker.css" />
+<link rel="stylesheet" href="/static/chat.css" />
+<link rel="stylesheet" href="./rooms.css?v=stage3" />
+<link rel="stylesheet" href="./game-integration.css?v=stage3" />
+<script src="/static/state.js"></script><script src="/static/location.js"></script>
+<script src="/static/location-picker.js"></script><script src="/static/chat.js"></script>
+<script>document.body.dataset.gameScreen=location.pathname.split('/').filter(Boolean).at(-1)==='play'?'play':'select';</script>
+<script type="module" src="./app.mjs?v=stage3"></script>
+  </body>
 </html>

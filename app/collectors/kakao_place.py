@@ -77,8 +77,9 @@ def validate_place_url(kakao_id: str, place_url: str) -> str:
 class KakaoPlaceCollector:
     """Playwright 브라우저로 동적 페이지를 읽는 재사용 가능한 수집기."""
 
-    def __init__(self, *, timeout_ms: int = 15_000):
+    def __init__(self, *, timeout_ms: int = 15_000, hours_only: bool = False):
         self.timeout_ms = timeout_ms
+        self.hours_only = hours_only
         self._manager = None
         self._browser: Browser | None = None
 
@@ -167,6 +168,18 @@ class KakaoPlaceCollector:
                     };
                 }"""
             )
+
+            if self.hours_only:
+                if not isinstance(hours_payload, dict):
+                    raise PlaceCollectionError("parse_failed", "page_structure")
+                return RawPlacePage(
+                    menu_section_present=False, menus=(),
+                    hours_section_present=bool(hours_payload.get("hoursSectionPresent")),
+                    business_days=tuple(RawBusinessDay(str(item.get("dayText", "")),
+                        tuple(str(value) for value in item.get("details", [])))
+                        for item in hours_payload.get("businessDays", [])
+                        if isinstance(item, dict) and isinstance(item.get("details", []), list)),
+                )
 
             # 홈 화면은 메뉴 일부만 보여주므로 더보기 후 전체 메뉴 DOM을 읽는다.
             for _ in range(10):

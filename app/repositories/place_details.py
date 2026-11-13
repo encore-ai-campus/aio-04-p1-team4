@@ -48,6 +48,9 @@ def save_place_details(
                     normalized_name=item.normalized_name,
                     price=item.price,
                     price_status=item.price_status,
+                    source_provider="kakao",
+                    source_url=restaurant.place_url,
+                    verified_at=now,
                 )
                 for item in details.menus
             )
@@ -67,6 +70,8 @@ def save_place_details(
                     ends_next_day=item.ends_next_day,
                     last_order_time=item.last_order_time,
                     sequence=item.sequence,
+                    source_url=restaurant.place_url,
+                    verified_at=now,
                 )
                 for item in details.business_hours
             )
@@ -75,6 +80,10 @@ def save_place_details(
     status.menu_status = details.menu_status
     status.hours_status = details.hours_status
     status.last_attempt_at = now
+    if details.menu_status == "success":
+        status.menu_last_success_at = now
+    if details.hours_status == "success":
+        status.hours_last_success_at = now
     if "parse_failed" not in {details.menu_status, details.hours_status}:
         status.last_success_at = now
     status.error_code = details.error_code

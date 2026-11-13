@@ -6,7 +6,7 @@ from time import perf_counter
 
 import anyio
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import router
@@ -124,6 +124,27 @@ def index():
 @app.get("/config.json", include_in_schema=False)
 def frontend_config():
     return JSONResponse({"apiBase": ""}, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/conditions", include_in_schema=False)
+def conditions_page():
+    """기존 조건 화면 주소는 홈으로 정규화한다."""
+    return RedirectResponse('/', status_code=307)
+
+
+def home_subpage():
+    """새로고침과 직접 접속에도 같은 화면 셸을 제공한다."""
+    return FileResponse(STATIC / 'index.html')
+
+
+for page in ('ai', 'budget', 'time', 'distance', 'people', 'group-input', 'play', 'result'):
+    app.add_api_route('/' + page, home_subpage, methods=['GET'], include_in_schema=False)
+
+
+@app.get('/restaurants', include_in_schema=False)
+@app.get('/route', include_in_schema=False)
+def legacy_map_page():
+    return RedirectResponse('/map/', status_code=307)
 
 
 # 브라우저에 공개해도 되는 JavaScript 키만 반환합니다. 전체 설정이나 REST/Groq 키는 반환하지 않습니다.

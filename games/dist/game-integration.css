@@ -1,0 +1,12 @@
+/* 원본 게임 외형에 DB 후보 정보와 실제 위치 연결을 보완한다. */
+.db-candidate-note { color: #72829b; font-size: 13px; margin: 10px 0; }
+.location-note { overflow-wrap: anywhere; }
+.result-stats { flex-wrap: wrap; }
+.result-stats span { white-space: normal; }
+.stage-dock { z-index: 30; }
+@media (max-width: 760px) {
+  .game-page-heading { padding-right: 0; }
+  .result-stats { gap: 8px; }
+  .result-desc, .result-note { font-size: 12px; line-height: 1.6; }
+  .result-stats > span { font-size: 11px; }
+}

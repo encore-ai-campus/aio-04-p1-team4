@@ -1,4 +1,4 @@
-"""Real browser/HTTP/backend policy; only Groq interpretation and Kakao are stubbed."""
+"""Real browser/HTTP/backend policy; Groq interpretation/narration and Kakao are stubbed."""
 import json
 import os
 import shutil
@@ -21,6 +21,10 @@ from test_game_browser_flow import free_port, select_game
 def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
     boundary = recommendations.RecommendationTests()
     boundary.setUp()
+    # 5단계: 성공한 답변 구성이 실제 화면과 저장 대화에 표시되는 경로도 검증한다.
+    boundary.narrate.side_effect=lambda context:{'content':json.dumps({'paragraphs':[
+        {'opening':'확인한 내용을 정리해드릴게요.','fact_ids':list(range(len(context['facts']))),'closing':''}
+    ]},ensure_ascii=False)}
     boundary.search.return_value = {'items': [{**recommendations.ITEM, 'category':'음식점 > 중식'}], 'has_more':False}
     root = Path(__file__).resolve().parents[1]
     api_port, node_port = free_port(), free_port()
@@ -82,21 +86,21 @@ def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
             expect(page.locator('.lr-chat-message')).to_have_count(2)
             expect(page.locator('.lr-chat textarea')).to_be_enabled()
             assert page.evaluate('LunchRunState.read().menu.id') == 'noodle'
+            assert '확인한 내용을 정리해드릴게요.' in page.locator('.lr-chat-message').last.inner_text()
             boundary.search.assert_not_awaited()
             assert requests[-1]['conditions']['cuisine'] == '중식'
             assert requests[-1]['menu_id'] is None
 
-            send('반경을 줄여줘', {'intent':'clarify', 'clarification_kind':'radius'})
-            assert page.evaluate('LunchRunState.read().conditions.radius_m') == 500
-            send('100', {'intent':'change_conditions', 'condition_patch':{'radius_m':100}})
-            assert boundary.interpret.call_args.kwargs['pending_action']['kind'] == 'change_radius'
-            assert page.evaluate('LunchRunState.read().conditions.radius_m') == 500
-            page.locator('[data-chat-apply]').click()
+            # 4단계: 상대 반경과 명시 반경을 별도 적용 버튼 없이 바로 반영한다.
+            send('반경을 줄여줘', {'intent':'change_conditions', 'radius_adjustment':'decrease'})
+            assert page.evaluate('LunchRunState.read().conditions.radius_m') == 450
+            send('반경을 100m로 바꿔줘', {'intent':'change_conditions', 'condition_patch':{'radius_m':100}})
             assert page.evaluate('LunchRunState.read().conditions.radius_m') == 100
-            assert page.evaluate('LunchRunState.read().menu') is None
+            assert page.evaluate('LunchRunState.read().menu.id') == 'noodle'
+            expect(page.locator('[data-chat-apply]')).to_have_count(0)
             boundary.search.assert_not_awaited()
 
-            # Stale proposals cannot overwrite newer location/conditions.
+            # New local conditions remain authoritative after a completed server change.
             send('예산을 1만원으로', {'intent':'change_conditions', 'condition_patch':{'budget':10000}})
             page.evaluate('LunchRunState.setContext({conditions:{budget:11000}})')
             expect(page.locator('[data-chat-apply]')).to_have_count(0)

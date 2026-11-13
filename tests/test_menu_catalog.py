@@ -243,7 +243,7 @@ def test_restaurant_industry_controls_verified_menu_candidates(tmp_path: Path):
                 budget=8000, cuisine="도시락/구내식당",
             )
         assert [item.id for item in candidates] == ["bibimbap"]
-        assert candidates[0].cuisine == "한식"  # 대표 메뉴 업종과 매장 업종을 구분
+        assert candidates[0].cuisine == "도시락/구내식당"
         assert candidates[0].source == "database"
     finally:
         database.dispose()

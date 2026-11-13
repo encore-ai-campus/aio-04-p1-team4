@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from .database import get_db, Restaurant, Menu
 from .schemas import RecommendationRequest
-from .recommendation_engine import current_open_status
+from .db_recommendations import recommendation_hours
 
 # 하이픈이 있는 기존 데모 폴더의 경로 계산 코드를 그대로 재사용한다.
 walking = import_module("kakao-map.walk_routes")
@@ -82,7 +82,8 @@ def restaurant_details(restaurant_id: str, session: Annotated[Session, Depends(g
     row = session.get(Restaurant, restaurant_id)
     if row is None:
         raise HTTPException(404, '저장된 식당 상세정보가 없습니다.')
-    opened, holiday_unknown = current_open_status(row.business_hours)
+    # 6단계: 상세 지도도 채팅·추천과 동일하게 누락 시간표와 종료를 구분한다.
+    opened, holiday_unknown = recommendation_hours(row)
     detail = row.detail_status
     checked_at = (detail.hours_last_success_at or detail.last_success_at) if detail else None
     return {'id': row.id, 'name': row.name, 'place_url': row.place_url,
@@ -106,7 +107,8 @@ async def nearby(body: RecommendationRequest, request: Request, session: Annotat
         menu_id=body.menu_id)
     restaurants = restaurant_payloads(products)
     return {'restaurants': restaurants, 'candidate_restaurants': [], 'has_more': False,
-        'source': 'database', 'message': f'DB 조건을 통과한 식당 {len(restaurants)}곳입니다. 인분 미확인 상품은 표시 가격 기준입니다.'}
+        'source': 'database', # 6단계: 제거한 인분 조건을 다시 안내하지 않는다. 누락 정보는 식당별 warnings에 있다.
+        'message': f'DB 조건을 통과한 식당 {len(restaurants)}곳입니다.'}
 
 
 @router.get("/{filename}", include_in_schema=False)

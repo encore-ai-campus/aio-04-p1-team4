@@ -44,6 +44,18 @@ class PendingAction(BaseModel):
     restaurant_ids: list[str] = Field(default_factory=list, max_length=15)
 
 
+class DisplayedRestaurant(BaseModel):
+    """3단계: 답변에 실제 표시한 상품을 보관한다. 가격은 당시 표시 금액이다."""
+
+    model_config = ConfigDict(extra="forbid")
+    restaurant_id: str
+    name: str = ""
+    product_id: int | None = None
+    menu_id: str | None = None
+    menu_name: str = ""
+    price: int | None = None
+
+
 class ChatSessionState(BaseModel):
     """최근 10턴과 턴 수명보다 오래 유지할 현재 추천 상태."""
 
@@ -57,9 +69,27 @@ class ChatSessionState(BaseModel):
     recent_menu_ids: list[str] = Field(default_factory=list, max_length=10)
     restaurant_ids: list[str] = Field(default_factory=list, max_length=15)
     candidate_restaurant_ids: list[str] = Field(default_factory=list, max_length=15)
+    # 순서가 곧 화면의 첫째~셋째이며, DB 조회 순서나 최저가로 재구성하지 않는다.
+    displayed_restaurants: list[DisplayedRestaurant] = Field(default_factory=list, max_length=3)
+    focused_restaurant_id: str | None = None
+    last_recommendation_kind: Literal["menu", "restaurant"] | None = None
+    recommendation_conditions: Conditions | None = None
+    recommendation_location: SelectedLocation | None = None
+    recommendation_radius_m: int | None = None
     pending_action: PendingAction | None = None
     last_intent: str | None = Field(default=None, max_length=50)
     version: int = Field(default=0, ge=0)
+
+    def clear_recommendation_context(self) -> None:
+        """필터·메뉴 변경 시 과거 식당과 추천 이유를 함께 무효화한다."""
+        self.restaurant_ids = []
+        self.candidate_restaurant_ids = []
+        self.displayed_restaurants = []
+        self.focused_restaurant_id = None
+        self.last_recommendation_kind = None
+        self.recommendation_conditions = None
+        self.recommendation_location = None
+        self.recommendation_radius_m = None
 
     def record_exchange(
         self,
@@ -85,8 +115,7 @@ class ChatSessionState(BaseModel):
         changed = changed or (requested_menu_id is not None and requested_menu_id != self.selected_menu_id)
         if changed:
             self.selected_menu_id = requested_menu_id
-            self.restaurant_ids = []
-            self.candidate_restaurant_ids = []
+            self.clear_recommendation_context()
             self.pending_action = None
         self.conditions = conditions.model_copy(deep=True)
         self.location = location.model_copy(deep=True)
@@ -111,12 +140,32 @@ class ChatSessionState(BaseModel):
             self.candidate_restaurant_ids = _result_ids(
                 result.get("candidate_restaurants")
             )
+            # 3단계: 실제 응답 순서와 상품을 복사한다. 후속 조회가 DB를 바꿔도 유지한다.
+            self.displayed_restaurants = [
+                DisplayedRestaurant(
+                    restaurant_id=item['id'], name=item.get('name') or '',
+                    product_id=item.get('product_id'), menu_id=item.get('menu_id'),
+                    menu_name=item.get('menu_name') or '', price=item.get('price'),
+                ) for item in (result.get('restaurants') or [])[:3]
+                if isinstance(item, dict) and isinstance(item.get('id'), str)
+            ]
+            self.focused_restaurant_id = None
+            self.last_recommendation_kind = (
+                'restaurant' if self.displayed_restaurants else 'menu' if menu else None
+            )
+            self.recommendation_conditions = conditions.model_copy(deep=True) if menu else None
+            self.recommendation_location = location.model_copy(deep=True) if menu else None
+            self.recommendation_radius_m = radius_m if menu else None
             self.last_intent = last_intent or "recommend"
         elif response.get("suggested_patch"):
             self.last_intent = last_intent or "change_conditions"
         else:
             self.last_intent = last_intent or "chat"
 
+        # 특정 식당을 지목한 후에는 '그 식당'이 그 대상을 이어서 가리킬 수 있다.
+        detail = response.get('restaurant_detail') or {}
+        if detail.get('restaurant_id') in {item.restaurant_id for item in self.displayed_restaurants}:
+            self.focused_restaurant_id = detail['restaurant_id']
         if clear_pending:
             self.pending_action = None
         if pending_action is not None:

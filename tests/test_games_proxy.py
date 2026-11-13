@@ -1,6 +1,7 @@
 """Verify that the backend serves the standalone game through /games."""
 
 import unittest
+from unittest.mock import patch
 
 import httpx
 from fastapi.testclient import TestClient
@@ -25,6 +26,10 @@ class StubProxyClient:
 
 class GamesProxyTests(unittest.TestCase):
     def setUp(self):
+        # 6단계: 배포 주소 설정과 독립적으로 프록시 전달 규칙만 검증한다.
+        origin_patch=patch('games.app.NODE_ORIGIN','http://127.0.0.1:4174')
+        origin_patch.start()
+        self.addCleanup(origin_patch.stop)
         self.original_proxy_client = getattr(app.state, "proxy_client", None)
         self.proxy_client = StubProxyClient()
         app.state.proxy_client = self.proxy_client

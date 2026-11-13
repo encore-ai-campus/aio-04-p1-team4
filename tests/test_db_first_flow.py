@@ -46,7 +46,7 @@ def test_no_catalog_price_fallback(database):
         assert menu_candidates(s, latitude=37.5, longitude=127.0, radius_m=500, budget=9000) == []
 
 
-def test_exact_link_prices_and_portion_warning(database):
+def test_exact_link_prices_without_portion_warning(database):
     with database.session_factory.begin() as s:
         add_place(s)
         add_place(s, 'two', price=8500)
@@ -57,12 +57,13 @@ def test_exact_link_prices_and_portion_warning(database):
         assert len(result) == 1
         assert result[0]['nearby_restaurant_count'] == 2
         assert (result[0]['verified_price'], result[0]['verified_price_max']) == (7000, 8500)
-        assert result[0]['serving_unverified']
-        assert '인분 미확인' in result[0]['warnings'][0]
+        # 1단계부터 인분·품절은 판정하거나 안내하지 않는다.
+        assert not result[0]['serving_unverified']
+        assert result[0]['warnings'] == []
         assert products(s, excluded_menu_ids={'noodle'}) == []
 
 
-@pytest.mark.parametrize('reason', ['budget', 'distance', 'cuisine', 'closed', 'hours', 'sold_out'])
+@pytest.mark.parametrize('reason', ['budget', 'distance', 'cuisine', 'closed'])
 def test_reject_ineligible_products(database, reason):
     with database.session_factory.begin() as s:
         r = add_place(s)
@@ -89,7 +90,7 @@ def test_recommend_does_not_search_or_write(database):
         assert result['source'] == 'database'
         assert result['menu']['id'] == 'noodle'
         assert len(result['restaurants']) == 1
-        assert result['restaurants'][0]['serving_unverified']
+        assert not result['restaurants'][0]['serving_unverified']
         assert s.scalar(select(func.count()).select_from(Menu)) == before
         assert not s.new and not s.dirty and not s.deleted
     client.search_restaurants.assert_not_called()

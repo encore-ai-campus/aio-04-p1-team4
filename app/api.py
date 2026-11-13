@@ -177,20 +177,31 @@ async def _record_chat_result(
     request: Request,
     session_id: str,
     result: dict,
+    progress=None,
 ) -> dict:
     """일반·스트리밍 API가 성공 결과를 동일한 세션 규칙으로 기록하게 한다."""
 
     # 외부 호출까지 성공한 응답만 최근 10턴과 현재 추천 상태에 기록한다.
     # 서비스의 세션 지시는 브라우저 응답에 노출하지 않고 검증된 상태 모델에만 적용한다.
+    # 5단계: 서버의 실행 결과가 확정된 뒤에만 설명한다. 성공/실패 어느 쪽도 조건을 바꾸지 않는다.
+    from .answer_narration import narrate_response
+    old_state=await request.app.state.chat_sessions.get(session_id)
+    await narrate_response(result,message=body.message.strip(),conditions=body.conditions,
+        radius_m=body.radius_m,location=body.location,state=old_state,
+        groq=GroqClient(request.app.state.settings),enabled=request.app.state.settings.groq_narration_enabled,
+        progress=progress)
     session_meta = result.pop("_session", {})
+    # 4단계: 요청 당시 값 대신 서버가 실제 적용한 조건을 일반·스트림에 동일하게 기록한다.
+    effective_conditions = body.conditions.model_validate(session_meta.get('effective_conditions') or body.conditions.model_dump())
+    effective_radius = session_meta.get('effective_radius_m',body.radius_m)
     state = await request.app.state.chat_sessions.record_exchange(
         session_id,
         user_message=body.message.strip(),
         assistant_message=result["text"],
-        conditions=body.conditions,
+        conditions=effective_conditions,
         location=body.location,
-        radius_m=body.radius_m,
-        requested_menu_id=body.menu_id,
+        radius_m=effective_radius,
+        requested_menu_id=None if session_meta.get('conditions_changed') else body.menu_id,
         response=result,
         pending_action=session_meta.get("pending_action"),
         clear_pending=bool(session_meta.get("clear_pending")),
@@ -199,7 +210,8 @@ async def _record_chat_result(
     return {
         **result,
         "location": body.location.model_dump(),
-        "radius_m": body.radius_m,
+        "radius_m": effective_radius,
+        "conditions": effective_conditions.model_dump(),
         "session_version": state.version,
     }
 
@@ -283,7 +295,7 @@ async def chat_stream(
                 ),
                 progress=progress,
             )
-            final = await _record_chat_result(body, request, session_id, result)
+            final = await _record_chat_result(body, request, session_id, result, progress=progress)
             await queue.put(
                 {
                     "event": "completed",
@@ -383,6 +395,9 @@ async def chat_session(request: Request, response: Response,
         "location": state.location.model_dump() if state.location else None,
         "radius_m": state.radius_m,
         "selected_menu": selected_menu,
+        # 3단계: 개발자 도구에서 실제 표시 순서와 상품·가격을 직접 확인할 수 있다.
+        "displayed_restaurants": [item.model_dump() for item in state.displayed_restaurants],
+        "last_recommendation_kind": state.last_recommendation_kind,
         "restaurant_ids": state.restaurant_ids,
         "candidate_restaurant_ids": state.candidate_restaurant_ids,
         "pending_action": (

@@ -46,7 +46,8 @@ def test_db_home_game_map_and_back(database, tmp_path, monkeypatch):
             time.sleep(.05)
         external = AsyncMock(side_effect=AssertionError('external restaurant lookup forbidden'))
         interpretation = AsyncMock(return_value=QuestionInterpretation(intent='recommend_menu'))
-        with patch('app.clients.kakao.KakaoClient.search_restaurants', external), patch('app.clients.groq.GroqClient.interpret', interpretation), sync_playwright() as p:
+        # 5단계: 추가 설명 호출은 실제 API를 쓰지 않는다.
+        with patch('app.clients.groq.GroqClient.compose_answer',AsyncMock(side_effect=RuntimeError('narration_stub'))), patch('app.clients.kakao.KakaoClient.search_restaurants', external), patch('app.clients.groq.GroqClient.interpret', interpretation), sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(reduced_motion='reduce', viewport={'width':1440,'height':1000})
             errors = []
@@ -56,7 +57,7 @@ def test_db_home_game_map_and_back(database, tmp_path, monkeypatch):
             page.goto(origin+'/')
             page.evaluate("""() => {LunchRunState.setContext({location:{lat:37.5,lng:127,name:'시험 위치',source:'place'},conditions:{budget:9000,cuisine:'중식',deadline:Date.now()+30*60000}});dispatchEvent(new PopStateEvent('popstate'));}""")
             expect(page.locator('#db-menu-preview')).to_contain_text('짜장면 7,000~7,000원')
-            expect(page.locator('#db-menu-preview')).to_contain_text('인분 미확인')
+            expect(page.locator('#db-menu-preview')).not_to_contain_text('인분 미확인')
             page.locator('#screen [data-action="go:backend-games"]').click()
             page.wait_for_url('**/games/**')
             expect(page.locator('#candidate-count')).to_have_text('1개')
@@ -65,11 +66,13 @@ def test_db_home_game_map_and_back(database, tmp_path, monkeypatch):
             page.locator('[data-action="play"]').click()
             page.locator('[data-action="open-capsule"]').first.click()
             expect(page.locator('.result-title')).to_have_text('짜장면')
-            expect(page.locator('.result-stats')).to_contain_text('인분 미확인')
+            # 6단계: 검증하지 않는 인분/판매 상태를 확인됐다고 표시하지 않는다.
+            expect(page.locator('.result-stats')).not_to_contain_text('인분 미확인')
+            expect(page.locator('.result-stats')).not_to_contain_text('1인분 확인')
             page.locator('[data-action="find"]').click()
             page.wait_for_url('**/map/**')
             expect(page.locator('#restaurant-list')).to_contain_text('one')
-            expect(page.locator('#restaurant-list')).to_contain_text('인분 미확인')
+            expect(page.locator('#restaurant-list')).not_to_contain_text('인분 미확인')
             page.go_back()
             page.wait_for_url('**/games/**')
             page.go_back()
@@ -87,13 +90,13 @@ def test_db_home_game_map_and_back(database, tmp_path, monkeypatch):
             page.locator('.lr-chat textarea').press('Enter')
             expect(page.locator('.lr-chat-message')).to_have_count(2)
             expect(page.locator('.lr-chat textarea')).to_be_enabled()
-            expect(page.locator('.lr-chat-menu')).to_contain_text('인분 미확인')
+            expect(page.locator('.lr-chat-menu')).not_to_contain_text('인분 미확인')
             interpretation.return_value = QuestionInterpretation(intent='search_restaurants')
             page.locator('.lr-chat textarea').fill('식당 찾아줘')
             page.locator('.lr-chat textarea').press('Enter')
             expect(page.locator('.lr-chat-message')).to_have_count(4)
             expect(page.locator('.lr-chat textarea')).to_be_enabled()
-            expect(page.locator('.lr-chat-message').last).to_contain_text('인분 미확인')
+            expect(page.locator('.lr-chat-message').last).not_to_contain_text('인분 미확인')
             assert page.evaluate('LunchRunState.read().restaurants.length') == 1
             page.reload()
             page.wait_for_url(origin+'/ai')

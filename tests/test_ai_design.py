@@ -47,7 +47,8 @@ def test_ai_design_db_conversation_proposal_and_recovery(database, monkeypatch):
             time.sleep(.05)
         assert server.started
         external=AsyncMock(side_effect=AssertionError('restaurant search forbidden'))
-        with patch('app.clients.groq.GroqClient.interpret',side_effect=interpret),patch('app.clients.kakao.KakaoClient.search_restaurants',external),sync_playwright() as p:
+        # 5단계: 추가 설명 호출은 실제 API를 쓰지 않는다.
+        with patch('app.clients.groq.GroqClient.compose_answer',AsyncMock(side_effect=RuntimeError('narration_stub'))), patch('app.clients.groq.GroqClient.interpret',side_effect=interpret),patch('app.clients.kakao.KakaoClient.search_restaurants',external),sync_playwright() as p:
             browser=p.chromium.launch(headless=True)
             for label,size in [('desktop',{'width':1516,'height':1038}),('mobile',{'width':390,'height':844})]:
                 page=browser.new_page(viewport=size,reduced_motion='reduce')
@@ -79,19 +80,18 @@ def test_ai_design_db_conversation_proposal_and_recovery(database, monkeypatch):
                 assert page.locator('.lr-chat textarea').input_value()=='메뉴\n'
                 send('메뉴 추천해줘',{'intent':'recommend_menu'})
                 expect(page.locator('.lr-chat-menu')).to_contain_text('짜장면')
-                expect(page.locator('.lr-chat-menu')).to_contain_text('인분 미확인')
+                expect(page.locator('.lr-chat-menu')).not_to_contain_text('인분 미확인')
                 send('식당 찾아줘',{'intent':'search_restaurants'})
                 assert page.evaluate('LunchRunState.read().restaurants.length')==1
                 send('그 식당 가격 알려줘',{'intent':'ask_restaurant_detail','restaurant_id':'one','requested_detail':'price'})
                 expect(page.locator('.lr-chat-message').last).to_contain_text('7,000원')
                 page.screenshot(path=str(output/f'merged-thread-{label}.png'),full_page=True)
                 send('예산을 만원으로 바꿔줘',{'intent':'change_conditions','condition_patch':{'budget':10000}})
-                expect(page.locator('.lr-chat-proposal')).to_be_visible()
-                assert page.evaluate('LunchRunState.read().conditions.budget')==9000
-                page.screenshot(path=str(output/f'merged-proposal-{label}.png'),full_page=True)
-                page.locator('[data-chat-apply]').click()
+                # 4단계: 서버가 확정한 조건을 확인 버튼 없이 즉시 반영한다.
                 assert page.evaluate('LunchRunState.read().conditions.budget')==10000
-                assert page.evaluate('LunchRunState.read().menu') is None
+                expect(page.locator('[data-chat-apply]')).to_have_count(0)
+                page.screenshot(path=str(output/f'merged-proposal-{label}.png'),full_page=True)
+                assert page.evaluate('LunchRunState.read().menu.id')=='noodle'
                 assert page.evaluate('LunchRunState.read().restaurants')==[]
                 send('다시 추천해줘',{'intent':'recommend_menu'})
                 send('이 메뉴 식당 조회',{'intent':'search_restaurants'})

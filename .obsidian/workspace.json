@@ -49,21 +49,6 @@
         "type": "tabs",
         "children": [
           {
-            "id": "fff5ba390e539c27",
-            "type": "leaf",
-            "state": {
-              "type": "file-explorer",
-              "state": {
-                "sortOrder": "alphabetical",
-                "autoReveal": false,
-                "showSearch": false,
-                "searchQuery": ""
-              },
-              "icon": "lucide-folder-closed",
-              "title": "파일 탐색기"
-            }
-          },
-          {
             "id": "f7e5f79bcd445fdd",
             "type": "leaf",
             "state": {
@@ -204,6 +189,19 @@
   },
   "active": "8fcfedbc77dba8c1",
   "lastOpenFiles": [
+    "docs/random_game_flow_v1.md",
+    "data/lunchrun.db-shm",
+    "data/lunchrun.db-wal",
+    "kakao-map/walk_routes.py",
+    "kakao-map/styles.css",
+    "kakao-map/serve.py",
+    "kakao-map/routes.js",
+    "kakao-map/pj.code-workspace",
+    "kakao-map/pin-overlaps.js",
+    "kakao-map/nearby-search.js",
+    "kakao-map/nearby-data.js",
+    "README.md",
+    "BACKEND_DB_GUIDE.md",
     "docs_old/README.md",
     "docs_old/docs/step5_db_chat_verification_v1.md",
     "docs_old/docs/step4_groq_guardrail_verification_v1.md",
@@ -214,14 +212,10 @@
     "docs_old/docs/chatbot_policy_v3.md",
     "docs_old/docs/chatbot_policy_v2.md",
     "docs_old/docs/chatbot_policy_v1.md",
-    "docs_old/docs",
     "docs_old/INTEGRATION_QA.md",
     "docs_old/GUARDRAIL_VALIDATION.md",
     "docs_old/CHAT_POLICY_GUIDE.md",
     "docs_old/README_demo.md",
-    "docs_old",
-    "CHATBOT_GUARDRAIL_GUIDE_v1.md",
-    "README.md",
-    "BACKEND_DB_GUIDE.md"
+    "CHATBOT_GUARDRAIL_GUIDE_v1.md"
   ]
 }

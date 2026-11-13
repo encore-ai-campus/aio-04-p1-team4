@@ -28,7 +28,8 @@ function refreshHomeCandidates(){
   try{
    const data=await request('/api/menus/candidates',body,{signal:controller.signal});
    if(version!==previewVersion||revision!==shared?.read().contextRevision||!panel.isConnected)return;
-   panel.textContent=data.menus.length?data.menus.map(m=>`${m.name} ${m.verified_price.toLocaleString()}~${m.verified_price_max.toLocaleString()}원 · ${m.nearby_restaurant_count}곳${m.serving_unverified?' · 인분 미확인':''}`).join(' / '):'현재 위치·예산·영업 조건에 맞는 DB 메뉴가 없습니다.';
+   // 1단계: 가격 미확인 메뉴도 후보이므로 NULL에 숫자 함수를 호출하지 않는다.
+   panel.textContent=data.menus.length?data.menus.map(m=>`${m.name} ${m.verified_price==null?'가격 확인 필요':m.verified_price.toLocaleString()+'~'+m.verified_price_max.toLocaleString()+'원'} · ${m.nearby_restaurant_count}곳${m.serving_unverified?' · 인분 미확인':''}`).join(' / '):'현재 위치·예산·영업 조건에 맞는 DB 메뉴가 없습니다.';
   }catch(e){if(version===previewVersion&&panel.isConnected&&!controller.signal.aborted)panel.textContent=e.message;}
  },180);
 }

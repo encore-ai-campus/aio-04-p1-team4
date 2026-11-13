@@ -38,7 +38,7 @@ def test_map_design_and_details(database, monkeypatch):
                 page.evaluate("""() => {LunchRunState.setContext({location:{lat:37.5,lng:127,name:'시험 위치',source:'place'},conditions:{budget:9000,cuisine:'중식',deadline:Date.now()+30*60000}});LunchRunState.setMenu({id:'noodle',name:'짜장면'});}""")
                 page.goto(origin+'/map/?search=1')
                 expect(page.locator('.restaurant-item')).to_have_count(2)
-                expect(page.locator('#restaurant-list')).to_contain_text('인분 미확인')
+                expect(page.locator('#restaurant-list')).not_to_contain_text('인분 미확인')
                 expect(page.locator('.map-stage-dock')).to_be_visible()
                 page.screenshot(path=str(output/f'map-{label}.png'),full_page=True)
                 page.locator('[data-restaurant="one"]').click()

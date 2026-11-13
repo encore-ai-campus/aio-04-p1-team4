@@ -58,9 +58,8 @@
   {
     "question": "반경을 줄여줘",
     "expected": {
-      "intent": "clarify",
-      "condition_patch": {},
-      "clarification_kind": "radius"
+      "intent": "change_conditions",
+      "radius_adjustment": "decrease"
     }
   },
   {

@@ -114,7 +114,8 @@ async function refreshCandidates(){
 }
 async function findRestaurants(){if(state.busy||!state.result)return;saveGame();gameRequest(state,state.result.id);location.assign('/map/?search=1');}
 
-function menuStats(m){return `<span>DB 표시가격 ${won(m.verified_price)}${m.verified_price_max>m.verified_price?`~${won(m.verified_price_max)}`:""}원 · ${m.nearby_restaurant_count}곳</span><span>${m.serving_unverified?"인분 미확인 · 표시 가격 기준":"1인분 확인"} · 판매 상태 미확인</span>`;}
+// 6단계: 인분·품절은 판정하지 않는다. 가격 누락을 '미확인원'처럼 금액으로 표시하지 않는다.
+function menuStats(m){const price=Number.isFinite(m.verified_price)?`DB 표시가격 ${won(m.verified_price)}${m.verified_price_max>m.verified_price?`~${won(m.verified_price_max)}`:""}원`:'가격 확인 필요';return `<span>${price} · ${m.nearby_restaurant_count}곳</span><span>식당별 가격과 영업시간은 목록에서 확인해주세요.</span>`;}
 const busyControls=new Map();
 function setBusy(value){
   state.busy=value;

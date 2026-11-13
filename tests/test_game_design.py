@@ -101,7 +101,7 @@ def test_game_select_play_history_and_design(database, tmp_path, monkeypatch):
                 page.locator('[data-action="play"]').click()
                 page.locator('[data-action="open-capsule"]').first.click()
                 expect(page.locator('.result-title')).to_have_text('짜장면')
-                expect(page.locator('.result-stats')).to_contain_text('인분 미확인')
+                expect(page.locator('.result-stats')).not_to_contain_text('인분 미확인')
                 page.screenshot(path=str(output/f'merged-result-{label}.png'),full_page=True)
                 page.reload()
                 expect(page.locator('.result-title')).to_have_text('짜장면')

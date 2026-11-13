@@ -25,6 +25,7 @@ window.LunchRunChat=(()=>{
     if(active?.root===root&&root.querySelector('.lr-chat'))return;
     active?.destroy();
     let messages=store.read().chat?.messages||[],draft=store.read().chat?.draft||'',proposal=null;
+    let applyingServerPatch=false; // 4단계: 서버 확정 변경을 외부 조건 변경 취소와 구분한다.
     let ready=false,busy=false,status='이전 대화를 확인하고 있어요.',controller=null,disposed=false,turn=0,retry=null;
     const persist=()=>store.setChat({messages:messages.slice(-20),draft});
     const fresh=(revision,id)=>!disposed&&turn===id&&store.read().contextRevision===revision;
@@ -91,7 +92,16 @@ window.LunchRunChat=(()=>{
         event(buffer);
         if(!fresh(revision,id))return;
         if(!completed||typeof completed.text!=='string')throw Error('최종 답변을 받지 못했어요. 다시 시도해주세요.');
-        accept(completed.result,revision,searched);
+        // 4단계: 오래된 응답은 위 fresh 검사에서 거부하고, 최신 서버 확정값만 즉시 반영한다.
+        let acceptedRevision=revision;
+        if(validPatch(completed.applied_patch)){
+          const conditions={...store.read().conditions};
+          for(const [key,value]of Object.entries(completed.applied_patch))if(key==='minutes')conditions.deadline=Date.now()+value*60000;else conditions[key]=value;
+          applyingServerPatch=true;
+          try{store.setContext({conditions});acceptedRevision=store.read().contextRevision;}
+          finally{applyingServerPatch=false;}
+        }
+        accept(completed.result,acceptedRevision,searched||completed.search_performed===true);
         messages.push({role:'assistant',text:completed.text});
         if(validPatch(completed.suggested_patch))proposal={patch:completed.suggested_patch,revision,id,search:completed.search_after_change===true};
         status='';persist();
@@ -113,7 +123,7 @@ window.LunchRunChat=(()=>{
       if(p.search)await send('변경된 조건으로 식당을 찾아줘');
     }
     let lastRevision=store.read().contextRevision;
-    const unsubscribe=store.subscribe(s=>{if(s.contextRevision!==lastRevision){lastRevision=s.contextRevision;onState();if(busy)cancel();else{proposal=null;paint();}}});
+    const unsubscribe=store.subscribe(s=>{if(s.contextRevision!==lastRevision){lastRevision=s.contextRevision;if(applyingServerPatch)return;onState();if(busy)cancel();else{proposal=null;paint();}}});
     function destroy(){if(disposed)return;disposed=true;++turn;controller?.abort();unsubscribe();persist();if(active?.root===root)active=null;}
     active={root,destroy};paint();restore();
   }

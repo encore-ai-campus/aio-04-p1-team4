@@ -45,7 +45,8 @@ class LocationTests(unittest.TestCase):
 
     def test_location_received_by_game_and_chat(self):
         # 두 경로가 같은 좌표를 수신하는지 확인하되 외부 식당 검색은 모의 처리합니다.
-        with patch("app.clients.groq.GroqClient.interpret", AsyncMock(return_value=QuestionInterpretation(intent="recommend_menu"))), patch("app.clients.kakao.KakaoClient.search_restaurants", AsyncMock(return_value={"items": [], "has_more": False})):
+        # 5단계: 설명 생성도 외부 네트워크 대신 서버 대체 답변으로 검증한다.
+        with patch('app.clients.groq.GroqClient.compose_answer',AsyncMock(side_effect=RuntimeError('narration_stub'))), patch("app.clients.groq.GroqClient.interpret", AsyncMock(return_value=QuestionInterpretation(intent="recommend_menu"))), patch("app.clients.kakao.KakaoClient.search_restaurants", AsyncMock(return_value={"items": [], "has_more": False})):
             for endpoint, extra in (("recommendations", {}), ("chat", {"message": "추천해줘"})):
                 response = self.client.post(f"/api/{endpoint}", json={"location": LOCATION, "radius_m": 500, **extra})
                 self.assertEqual(response.status_code, 200)

@@ -49,7 +49,9 @@ class QuestionInterpretation(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     intent: Literal[
         "recommend_menu", "reroll_menu", "search_restaurants", "ask_menu_detail",
-        "ask_restaurant_detail", "change_conditions", "clarify", "out_of_scope",
+        "list_menus", # 6단계: 후보 목록은 무작위 하나 선정과 구분한다.
+        # 3단계: 선정 이유는 음식 자체 설명과 구분하여 서버의 추천 문맥으로 답한다.
+        "ask_restaurant_detail", "explain_recommendation", "change_conditions", "clarify", "out_of_scope",
         # 기존 테스트와 단계 전환 중 입력만 허용하며 v2 프롬프트는 생성하지 않는다.
         "explain_menu",
     ]
@@ -58,6 +60,8 @@ class QuestionInterpretation(BaseModel):
     requested_detail: Literal["price", "hours", "address", "menu", "reason"] | None = None
     condition_patch: ConditionPatch = Field(default_factory=ConditionPatch)
     search_after_change: bool = False
+    # 4단계: 상대 반경은 방향만 해석하고 50m 계산·경계 제한은 서버가 담당한다.
+    radius_adjustment: Literal["increase", "decrease"] | None = None
     clarification: str | None = Field(default=None, min_length=1, max_length=200)
     clarification_kind: Literal[
         "ambiguous", "radius", "budget", "location", "unsupported", "conflict",
@@ -88,8 +92,11 @@ class QuestionInterpretation(BaseModel):
         """의도와 대상·조건·상세질문 필드가 서로 모순되지 않게 한다."""
 
         has_patch = bool(self.condition_patch.model_dump(exclude_none=True))
-        if has_patch != (self.intent == "change_conditions"):
+        has_change = has_patch or self.radius_adjustment is not None
+        if has_change != (self.intent == "change_conditions"):
             raise ValueError("조건 변경 의도와 변경 항목이 일치해야 합니다.")
+        if self.radius_adjustment is not None and self.condition_patch.radius_m is not None:
+            raise ValueError("반경의 절대값과 상대 조절을 동시에 지정할 수 없습니다.")
         if self.search_after_change and self.intent != "change_conditions":
             raise ValueError("변경 후 검색은 조건 변경 의도에서만 사용할 수 있습니다.")
 

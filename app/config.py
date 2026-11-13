@@ -21,6 +21,9 @@ class Settings(BaseModel):
     groq_api_key: SecretStr = Field(default=SecretStr(""), repr=False)
     groq_model: str = Field(default="openai/gpt-oss-20b", min_length=1)
     groq_timeout_seconds: float = Field(default=30, gt=0, le=120, allow_inf_nan=False)
+    # 5단계: 설명 생성만 비활성화하거나 짧은 제한시간을 둘 수 있다. 질문 해석은 유지한다.
+    groq_narration_enabled: bool = True
+    groq_narration_timeout_seconds: float = Field(default=8, gt=0, le=30, allow_inf_nan=False)
     groq_max_completion_tokens: int = Field(default=1024, ge=128, le=8192)
     # 현재는 메모리 세션이며 쿠키 수명과 메모리 만료시간에 같은 값을 사용한다.
     chat_session_ttl_seconds: int = Field(default=86400, ge=60, le=604800)
@@ -53,6 +56,8 @@ def load_settings() -> Settings:
         kakao_javascript_key=os.environ.get("KAKAO_JAVASCRIPT_KEY", "").strip(),
         # 기존 환경변수가 있으면 .env보다 우선하며 변경 후 서버를 재시작해야 합니다.
         groq_api_key=os.environ.get("GROQ_API_KEY", "").strip(),
+        groq_narration_enabled=os.environ.get('GROQ_NARRATION_ENABLED','true').lower()=='true',
+        groq_narration_timeout_seconds=os.environ.get('GROQ_NARRATION_TIMEOUT_SECONDS','8'),
         groq_model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b").strip(),
         groq_timeout_seconds=os.environ.get("GROQ_TIMEOUT_SECONDS", "30"),
         groq_max_completion_tokens=os.environ.get("GROQ_MAX_COMPLETION_TOKENS", "1024"),

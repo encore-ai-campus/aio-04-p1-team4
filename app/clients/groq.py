@@ -1,4 +1,4 @@
-"""3단계: Groq 질문 해석 전용 클라이언트입니다. 앱 채팅 경로 연결은 다음 단계입니다."""
+"""Groq 질문 해석과 5단계 답변 구성을 분리한 클라이언트."""
 import asyncio
 from dataclasses import dataclass
 
@@ -194,3 +194,40 @@ class GroqClient:
             raise GroqError(
                 "groq_connection", "AI 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", 503
             ) from None
+
+    async def compose_answer(self, context: dict) -> dict:
+        """5단계: 결과 설명을 한 번만 요청한다. 재시도 대신 상위 계층이 서버 답변을 쓴다."""
+        from ..answer_narration import build_narration_messages
+        key=self._settings.groq_api_key.get_secret_value().strip()
+        if not key: raise GroqError('groq_config','답변 생성 키가 설정되지 않았습니다.',503)
+        body={'model':self._settings.groq_model,'messages':build_narration_messages(context),
+              'temperature':0,'max_completion_tokens':min(512,self._settings.groq_max_completion_tokens),
+              'response_format':{'type':'json_object'}}
+        if self._settings.groq_model.startswith('openai/gpt-oss-'):
+            body.update(reasoning_effort='low',include_reasoning=False)
+        try:
+            async with asyncio.timeout(self._settings.groq_narration_timeout_seconds):
+                async with httpx.AsyncClient(timeout=self._settings.groq_narration_timeout_seconds,
+                                             follow_redirects=False,transport=self._transport) as client:
+                    response=await client.post(self.URL,json=body,headers={'Authorization':f'Bearer {key}'})
+            if response.status_code!=200:
+                code={401:'groq_auth',403:'groq_permission',429:'groq_rate_limit',400:'groq_request',404:'groq_model'}.get(response.status_code,'groq_upstream')
+                raise GroqError(code,'답변 생성 요청을 완료하지 못했습니다.')
+            data=response.json()
+            choice=data['choices'][0]
+            if choice.get('finish_reason')!='stop' or choice['message'].get('tool_calls') or choice['message'].get('refusal'):
+                raise ValueError('incomplete_answer')
+            content=choice['message']['content']
+            if not isinstance(content,str): raise ValueError('invalid_content')
+            usage=data.get('usage') or {}
+            # 사용량 숫자만 반환하며 외부 응답 원문이나 헤더를 디버깅 메타데이터에 넣지 않는다.
+            usage={key:usage[key] for key in ('prompt_tokens','completion_tokens','total_tokens')
+                   if type(usage.get(key)) is int and usage[key]>=0}
+            return {'content':content,'usage':usage or None}
+        except GroqError: raise
+        except (TimeoutError,httpx.TimeoutException):
+            raise GroqError('groq_timeout','답변 생성 시간이 초과되었습니다.',504) from None
+        except httpx.RequestError:
+            raise GroqError('groq_connection','답변 생성 서비스에 연결하지 못했습니다.',503) from None
+        except (ValueError,TypeError,KeyError,IndexError,AttributeError):
+            raise GroqError('groq_response','답변 생성 형식이 올바르지 않습니다.') from None

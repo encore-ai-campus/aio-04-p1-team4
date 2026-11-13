@@ -5,7 +5,7 @@ from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
 
-NODE_ORIGIN = "http://127.0.0.1:4174"
+NODE_ORIGIN = "https://lunchrun-games.onrender.com"
 HOP_BY_HOP_HEADERS = {
     "connection",
     "content-encoding",

@@ -395,6 +395,9 @@ async def chat_session(request: Request, response: Response,
         "location": state.location.model_dump() if state.location else None,
         "radius_m": state.radius_m,
         "selected_menu": selected_menu,
+        "restaurant_guidance": bool(selected_menu) and state.last_intent in {
+            "recommend_menu", "reroll_menu", "search_restaurants", "ask_restaurant_detail"
+        },
         # 3단계: 개발자 도구에서 실제 표시 순서와 상품·가격을 직접 확인할 수 있다.
         "displayed_restaurants": [item.model_dump() for item in state.displayed_restaurants],
         "last_recommendation_kind": state.last_recommendation_kind,

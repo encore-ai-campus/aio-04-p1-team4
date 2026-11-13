@@ -146,3 +146,13 @@ body .site-header [hidden] {
     gap: 16px;
   }
 }
+
+body:has(.app[data-view="ai"]) .site-header.topbar{inset:0 0 auto;width:100%;max-width:1280px;height:76px;margin:0 auto;padding:0 36px}
+@media(max-width:760px){body:has(.app[data-view="ai"]) .site-header.topbar{height:64px;padding:0 20px}}
+
+body .site-header .location-label{display:block;max-width:min(240px,30vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body .site-header .location-name{display:inline-block;white-space:nowrap;will-change:transform}
+body .site-header .location-scrolling .location-name{animation:location-scroll var(--location-duration,10s) linear infinite}
+@keyframes location-scroll{0%,15%{transform:translateX(0)}85%,100%{transform:translateX(var(--location-travel))}}
+@media(prefers-reduced-motion:reduce){body .site-header .location-scrolling .location-name{animation:none}}
+@media(max-width:760px){body .site-header .location-label{max-width:110px}}

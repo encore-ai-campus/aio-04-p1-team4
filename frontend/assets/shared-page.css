@@ -1,0 +1,34 @@
+/* Shared chrome follows home; heading and content columns follow games. */
+body .site-header.topbar{font-family:"Noto Sans KR","Malgun Gothic",sans-serif}
+body .site-header .avatar{display:grid}
+body .site-header .profile-label{display:inline}
+body .site-header .location-label{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body:not(.catalog-page) .viewport,body:not(.catalog-page) .map-viewport{height:auto;min-height:100dvh;overflow:visible}
+body .app[data-view],body:not(.catalog-page) .map-viewport>main.restaurant-page{position:relative;width:100%;max-width:1280px;margin:0 auto;height:auto;min-height:100dvh;transform:none;padding:124px 228px 100px 48px;display:block}
+body .app h1,.restaurant-page h1{position:relative;left:auto;top:auto;margin:0 0 28px;padding:0;font:700 34px/45.56px "Noto Sans KR","Malgun Gothic",sans-serif;letter-spacing:-1.4px}
+body .app #summary,.restaurant-page #map-summary{position:static;left:auto;top:auto;margin:0;font:400 14px/22.4px "Noto Sans KR","Malgun Gothic",sans-serif;color:#607188}
+body .app #screen,body .app[data-view] #screen{position:relative;left:auto;top:auto;width:100%;margin-top:32px}
+body .app[data-view="ai"]{padding-top:124px;padding-right:228px;padding-left:48px}
+body .app[data-view="ai"] #status,body .app #status{position:relative;left:auto;top:auto;width:100%;margin-top:12px}
+.restaurant-page .page-heading{position:static}
+.restaurant-page .page-context{position:relative;left:auto;top:auto;width:100%;display:flex;flex-direction:row;align-items:center;min-height:22.4px}
+.restaurant-page .search-options{position:absolute;right:0;top:-12px}
+body:not(.catalog-page) .restaurant-page aside{position:absolute;left:48px;top:280px;width:290px}
+.restaurant-page .map-section{position:relative;left:auto;top:auto;width:calc(100% - 314px);margin:60px 0 0 314px;padding:0}
+.restaurant-page .map{height:clamp(280px,calc(100dvh - 470px),500px);min-height:0}
+.restaurant-page .restaurant-list{max-height:clamp(280px,calc(100dvh - 470px),500px)}
+.restaurant-page .restaurant-item{height:94px;min-height:94px}
+.restaurant-page .restaurant-item .travel-info{font-size:11px;color:#607188;line-height:1.5}
+body .app footer,.theme-white .main-footer,.restaurant-page .map-section footer{position:fixed;left:55px;right:auto;top:auto;bottom:42px;width:auto;min-height:0;height:18px;margin:0;padding:0;border:0;display:flex;justify-content:flex-start;gap:0;font:400 14px/18px "Malgun Gothic","Noto Sans KR",sans-serif;color:#607188}
+.theme-white .main-footer::after{font:inherit;content:"LUNCH RUN　/　 SINCE 2026"}
+@media(max-height:800px) and (min-width:761px){body .app[data-view],body .app[data-view="ai"],body:not(.catalog-page) .map-viewport>main.restaurant-page{padding-top:110px}body .app h1,.restaurant-page h1{margin-bottom:18px}.theme-white #main{padding-top:34px}.game-page-heading h1{margin-bottom:18px}body:not(.catalog-page) .restaurant-page aside{top:245px}.restaurant-page .map-section{margin-top:38px}.restaurant-page .map{height:calc(100dvh - 390px)}.restaurant-page .restaurant-list{max-height:calc(100dvh - 390px)}}
+@media(max-width:1000px) and (min-width:761px){body .app[data-view],body:not(.catalog-page) .map-viewport>main.restaurant-page,.theme-white #main{padding-right:190px;padding-left:32px}body:not(.catalog-page) .restaurant-page aside{left:32px;width:220px}.restaurant-page .map-section{margin-left:240px;width:calc(100% - 240px)}}
+@media(max-width:760px){body .app[data-view],body:not(.catalog-page) .map-viewport>main.restaurant-page{display:block;padding:94px 18px 140px;min-height:100dvh}.theme-white #main{padding:30px 18px 140px}body .app h1,.restaurant-page h1{padding:0;margin:0 0 16px;font-size:25px;line-height:33.5px;letter-spacing:-1.4px}body .app #summary,.restaurant-page #map-summary{font-size:12px;line-height:19.2px}body:not(.catalog-page) .restaurant-page aside{position:static;width:100%;margin-top:24px}.restaurant-page .map-section{margin:30px 0 0;width:100%}.restaurant-page .map{height:420px}.restaurant-page .restaurant-list{max-height:230px}.restaurant-page .page-context{display:block}.restaurant-page .search-options{position:relative;top:auto;right:auto;width:100%;margin-top:16px}.restaurant-page .search-options-body{width:100%}body .app footer,.theme-white .main-footer,.restaurant-page .map-section footer{position:static;margin-top:28px;font-size:10px;height:auto}}
+
+@media(max-width:760px){body .app[data-view="ai"]{padding:94px 18px 140px}}
+
+body:not(.catalog-page) .viewport{width:100%;margin:0}
+
+body .app footer span,.restaurant-page .map-section footer span,.theme-white .main-footer::after{font:inherit;letter-spacing:normal}
+
+@media(min-width:761px){body .app:is([data-view="budget"],[data-view="time"],[data-view="distance"],[data-view="people"]) #screen{width:1140px;transform:scale(var(--scale));transform-origin:top left}}

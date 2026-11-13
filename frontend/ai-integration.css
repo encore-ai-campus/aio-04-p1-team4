@@ -23,7 +23,7 @@
 .app[data-view="ai"] .lr-chat-actions { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
 .app[data-view="ai"] .lr-chat button { min-height: 48px; padding: 12px 24px; border: 1px solid #d3d9e3; border-radius: 14px; background: #fff; color: #18233b; font-size: 18px; font-weight: 700; }
 .app[data-view="ai"] .lr-chat button.primary { width: 480px; max-width: 100%; min-height: 64px; font-size: 22px; background: #ff641a; border-color: #ff641a; color: #fff; }
-.app[data-view="ai"] .lr-chat button:disabled { opacity: .5; cursor: wait; }
+.app[data-view="ai"] .lr-chat button:disabled { opacity: .5; cursor: not-allowed; }
 .app[data-view="ai"] .lr-chat-status { display: flex; align-items: center; gap: 8px; min-height: 24px; margin: 12px 0; font-size: 14px; line-height: 1.6; color: #607188; }
 .app[data-view="ai"] .lr-chat-proposal { margin-top: 18px; padding: 18px 20px; border: 1px solid #ffd2b9; border-radius: 16px; background: #fff6ee; font-size: 16px; line-height: 1.7; }
 .app[data-view="ai"] .lr-chat-proposal p { margin: 8px 0 12px; }
@@ -49,3 +49,34 @@
   .app[data-view="ai"] .lr-chat button.primary { width: auto; min-width: 0; min-height: 48px; font-size: 16px; flex: 1; }
   .app[data-view="ai"] .lr-chat-proposal, .app[data-view="ai"] .lr-chat-menu, .app[data-view="ai"] .lr-chat-map { font-size: 14px; }
 }
+
+.app[data-view="ai"] .lr-chat-time{font-size:12px;color:#607188;margin-top:6px}
+
+/* Keep the document stationary; only conversations scroll. */
+html[data-page="ai"],body:has(.app[data-view="ai"]){height:100%;overflow:hidden;overscroll-behavior:none}
+body .viewport:has(.app[data-view="ai"]){height:100dvh;overflow:hidden}
+.app[data-view="ai"]{height:1038px;min-height:1038px}
+.app[data-view="ai"] #screen{height:600px;overflow:hidden}
+.app[data-view="ai"] #home-chat{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain}
+.app[data-view="ai"] .lr-chat{height:100%;display:flex;flex-direction:column;min-height:0}
+.app[data-view="ai"] .lr-chat-context,.app[data-view="ai"] .lr-chat-status,.app[data-view="ai"] .lr-chat-form{flex-shrink:0}
+.app[data-view="ai"] .lr-chat-log{flex:1;min-height:100px;height:auto;max-height:none;overflow:auto}
+.app[data-view="ai"] .lr-chat-proposal{flex-shrink:0;max-height:130px;overflow:auto}
+.app[data-view="ai"] .lr-chat-label{margin:12px 0 10px}
+.app[data-view="ai"] .lr-chat-actions{margin-top:16px}
+@media(max-width:760px){
+ .app[data-view="ai"]{height:100dvh;min-height:0;padding:96px 20px 112px;display:flex;flex-direction:column}
+ .app[data-view="ai"] h1,.app[data-view="ai"] #summary{flex-shrink:0}
+ .app[data-view="ai"] h1{margin-bottom:16px}
+ .app[data-view="ai"] #summary{margin-bottom:12px}
+ .app[data-view="ai"] #screen{height:auto;flex:1;min-height:0;overflow:hidden}
+ .app[data-view="ai"] .lr-chat-log{min-height:70px}
+ .app[data-view="ai"] .lr-chat-context{margin-bottom:8px}
+ .app[data-view="ai"] .lr-chat-status{margin:6px 0;min-height:20px;font-size:12px}
+ .app[data-view="ai"] .lr-chat-label{margin:8px 0;font-size:14px}
+ .app[data-view="ai"] .lr-chat textarea{height:80px;min-height:80px;max-height:80px}
+ .app[data-view="ai"] .lr-chat-actions{margin-top:10px}
+ body:has(.app[data-view="ai"]) .app[data-view="ai"] footer{position:absolute;top:auto;bottom:84px;left:0;width:100%;margin:0;font-size:10px;transform:none}
+}
+
+@media(max-width:760px){.app[data-view="ai"] main{display:flex;flex-direction:column;height:100%;min-height:0}.app[data-view="ai"] #status{flex-shrink:0;margin:0}}

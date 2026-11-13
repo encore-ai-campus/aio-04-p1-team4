@@ -40,6 +40,7 @@ def create_proxy_router(url_prefix: str) -> APIRouter:
             for key, value in request.headers.items()
             if key.lower() not in HOP_BY_HOP_HEADERS
         }
+        headers["accept-encoding"] = "identity"
         headers["x-forwarded-host"] = request.headers.get("host", "")
         headers["x-forwarded-proto"] = request.url.scheme
         headers["x-forwarded-prefix"] = url_prefix

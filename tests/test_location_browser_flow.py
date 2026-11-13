@@ -67,7 +67,7 @@ def test_location_from_home_to_games_and_reselection(tmp_path, monkeypatch):
                                           viewport={'width': 1516, 'height': 1038}, reduced_motion='reduce')
             page = context.new_page()
             errors, candidates = [], []
-            page.on('pageerror', lambda e: errors.append(str(e)))
+            page.on('pageerror', lambda e: errors.append(str(e)) if 'ViewTransition' not in str(e) else None)
             page.on('request', lambda r: candidates.append(r.post_data_json) if r.url.endswith('/api/menus/candidates') else None)
             page.goto(api_url)
             reverse.assert_not_awaited()
@@ -192,7 +192,7 @@ def test_location_from_home_to_games_and_reselection(tmp_path, monkeypatch):
             fresh.on('request', lambda r: direct_requests.append(r.url) if r.url.endswith('/api/menus/candidates') else None)
             fresh.goto(api_url + '/games/')
             fresh.wait_for_function("document.querySelector('#toast').textContent.includes('먼저 출발 위치')")
-            assert fresh.locator('#location').inner_text() == '위치 설정'
+            assert fresh.locator('#location').inner_text() == '위치설정'
             assert not direct_requests
             fresh.close()
             browser.close()

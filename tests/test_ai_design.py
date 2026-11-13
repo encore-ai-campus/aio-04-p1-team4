@@ -79,8 +79,9 @@ def test_ai_design_db_conversation_proposal_and_recovery(database, monkeypatch):
                 page.locator('.lr-chat textarea').press('Shift+Enter')
                 assert page.locator('.lr-chat textarea').input_value()=='메뉴\n'
                 send('메뉴 추천해줘',{'intent':'recommend_menu'})
-                expect(page.locator('.lr-chat-menu')).to_contain_text('짜장면')
-                expect(page.locator('.lr-chat-menu')).not_to_contain_text('인분 미확인')
+                expect(page.locator('[data-chat-route]')).to_be_enabled()
+                assert page.evaluate('LunchRunState.read().menu.id')=='noodle'
+                assert page.locator('.lr-chat-menu, .lr-chat-map, .lr-chat-note').count()==0
                 send('식당 찾아줘',{'intent':'search_restaurants'})
                 assert page.evaluate('LunchRunState.read().restaurants.length')==1
                 send('그 식당 가격 알려줘',{'intent':'ask_restaurant_detail','restaurant_id':'one','requested_detail':'price'})
@@ -99,7 +100,7 @@ def test_ai_design_db_conversation_proposal_and_recovery(database, monkeypatch):
                 expect(page.locator('.lr-chat textarea')).to_be_enabled()
                 expect(page.locator('.lr-chat-message')).to_have_count(12)
                 assert page.evaluate('LunchRunState.read().conditions.budget')==10000
-                assert page.locator('.lr-chat-map').get_attribute('href')=='/games/'
+                expect(page.locator('[data-chat-route]')).to_be_enabled()
                 if label=='desktop':
                     panel=page.locator('#screen').bounding_box()
                     dock=page.locator('#dock').bounding_box()

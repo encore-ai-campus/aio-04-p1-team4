@@ -65,9 +65,12 @@ def test_home_reference_layout_and_db_controls(database, monkeypatch):
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.goto(origin)
                 page.evaluate("""() => {LunchRunState.setContext({location:{lat:37.5,lng:127,name:'시험 위치',source:'place'},conditions:{budget:9000,cuisine:'중식',people:2,deadline:Date.now()+30*60000}});dispatchEvent(new PopStateEvent('popstate'));}""")
-                expect(page.locator('#db-menu-preview')).to_contain_text('짜장면')
+                assert page.locator('#db-menu-preview').count() == 0
+                assert page.locator('[data-category="전체"] svg').count() == 0
+                assert page.locator('[data-category] svg').count() == 14
+                assert page.locator('[data-category="중식"]').evaluate('(el)=>getComputedStyle(el).fontWeight') == '700'
                 assert page.locator('.site-header .brand img').count() == 1
-                assert page.locator('#dock button').count() == 5
+                assert page.locator('#dock button').count() == 4
                 assert page.locator('[data-category]').count() == 15
                 assert not page.locator('[data-category="중식"]').is_disabled()
                 assert page.locator('#scene').count() == 0
@@ -105,6 +108,12 @@ def test_home_reference_layout_and_db_controls(database, monkeypatch):
                 assert page.locator('input[type=range]').get_attribute('max') == '500'
                 page.screenshot(path=str(output/f'distance-{label}.png'), full_page=True)
                 assert errors == []
+                page.goto(origin)
+                page.locator('[data-category="술집"]').click()
+                expect(page.locator('.no-menu-dialog')).to_be_visible()
+                expect(page.locator('.no-menu-message')).to_have_text('현재 위치, 예산, 영업 조건에 맞는메뉴가 없습니다.')
+                assert page.locator('.no-menu-message br').count() == 1
+                page.locator('.no-menu-dialog .profile-save').click()
                 page.close()
             browser.close()
     finally:

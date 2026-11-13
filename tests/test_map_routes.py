@@ -50,6 +50,8 @@ class MapRouteTests(unittest.TestCase):
             parser.feed(response.text)
             self.assertTrue(parser.assets)
             for asset in parser.assets:
+                if asset.startswith(("https://", "http://")):
+                    continue
                 with self.subTest(asset=asset):
                     self.assertEqual(self.client.get(asset if asset.startswith('/') else "/map/" + asset).status_code, 200)
 

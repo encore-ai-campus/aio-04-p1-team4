@@ -79,7 +79,7 @@ function go(r,gameSource=null){
  if(source&&!reduce){
   const from=source.getBoundingClientRect();
   const commit=()=>{history.pushState(null,'',routePath(r));render();window.scrollTo(0,0);};
-  if(document.startViewTransition){source.style.viewTransitionName=transitionName;const t=document.startViewTransition(commit);t.finished.catch(()=>{});}
+  if(document.startViewTransition){source.style.viewTransitionName=transitionName;const t=document.startViewTransition(commit);t.ready.catch(()=>{});t.finished.catch(()=>{});t.updateCallbackDone?.catch(()=>{});}
   else {commit();const target=document.querySelector(gameSource?'.result':'.setting .value');if(target){const to=target.getBoundingClientRect();target.animate([{transformOrigin:'top left',transform:'translate('+(from.left-to.left)+'px,'+(from.top-to.top)+'px) scale('+from.width/to.width+','+from.height/to.height+')'},{transformOrigin:'top left',transform:'none'}],{duration:420,easing:'cubic-bezier(.2,.75,.25,1)'});}}
   return;
  }

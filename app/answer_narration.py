@@ -1,4 +1,4 @@
-"""5단계: 서버의 사실 문장을 보존하며 Groq가 답변의 연결·문단을 구성한다."""
+"""5단계: 서버의 사실 문장을 보존하며 Gemini가 답변의 연결·문단을 구성한다."""
 from __future__ import annotations
 
 import json
@@ -47,7 +47,7 @@ def validate_and_render(raw: str, facts: list[str]) -> str:
         raise ValueError('fact_order_or_omission')
     paragraphs=[]
     for paragraph in plan.paragraphs:
-        # 실제 식당명·상품·가격·주소·영업 여부·필수 안내는 Groq 문장이 아닌 서버 값을 넣는다.
+        # 실제 식당명·상품·가격·주소·영업 여부·필수 안내는 모델 문장이 아닌 서버 값을 넣는다.
         parts=[paragraph.opening,*[facts[i] for i in paragraph.fact_ids],paragraph.closing]
         paragraphs.append('\n'.join(part for part in parts if part))
     answer='\n\n'.join(paragraphs)
@@ -55,7 +55,7 @@ def validate_and_render(raw: str, facts: list[str]) -> str:
     return answer
 
 
-async def narrate_response(response, *, message, conditions, radius_m, location, state, groq,
+async def narrate_response(response, *, message, conditions, radius_m, location, state, gemini,
                            enabled=True, progress=None):
     """실패하더라도 추천·적용 조건·세션용 구조는 그대로 유지하고 서버 문장을 반환한다."""
     response['answer_source']='server'
@@ -92,17 +92,17 @@ async def narrate_response(response, *, message, conditions, radius_m, location,
     started=monotonic()
     try:
         if progress: await progress({'event':'generating_answer','message':'답변을 정리하고 있어요.'})
-        generated=await groq.compose_answer(context)
+        generated=await gemini.compose_answer(context)
         rendered=validate_and_render(generated['content'],facts)
         response['text']=rendered
         if isinstance(response.get('result'),dict): response['result']['message']=rendered
-        response['answer_source']='groq'
+        response['answer_source']='gemini'
         response['narration']={'status':'success','elapsed_ms':round((monotonic()-started)*1000,2),
                                'usage':generated.get('usage')}
     except Exception as error:
         # CancelledError는 BaseException이므로 취소를 삼키지 않는다. 원문/질문/위치는 로그에 남기지 않는다.
-        from .clients.groq import GroqError
-        reason=error.code if isinstance(error,GroqError) else 'narration_validation' if isinstance(error,(ValueError,TypeError,KeyError)) else 'narration_error'
+        from .clients.gemini import GeminiError
+        reason=error.code if isinstance(error,GeminiError) else 'narration_validation' if isinstance(error,(ValueError,TypeError,KeyError)) else 'narration_error'
         response['text']=original
         if isinstance(response.get('result'),dict): response['result']['message']=original
         response['answer_source']='server_fallback'

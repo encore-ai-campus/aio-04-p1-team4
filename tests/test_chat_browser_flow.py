@@ -1,4 +1,4 @@
-"""Real browser/HTTP/backend policy; Groq interpretation/narration and Kakao are stubbed."""
+"""Real browser/HTTP/backend policy; Gemini interpretation/narration and Kakao are stubbed."""
 import json
 import os
 import shutil
@@ -64,7 +64,7 @@ def test_chat_home_game_conditions_session_and_map(tmp_path, monkeypatch):
 
             def send(text, plan):
                 async def interpret(*_args, **_kwargs):
-                    # GroqClient normally validates IDs inside its DB-catalog scope.
+                    # GeminiClient normally validates IDs inside its DB-catalog scope.
                     # The stub bypasses only that external-client boundary.
                     return QuestionInterpretation.model_validate(plan, context={
                         'menu_ids': {m['id'] for m in _args[3]},

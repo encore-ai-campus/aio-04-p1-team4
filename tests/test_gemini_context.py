@@ -1,11 +1,11 @@
-"""Groq v2 최근 문맥 전달과 형식 오류 1회 재요청 검증."""
+"""Gemini v2 최근 문맥 전달과 형식 오류 1회 재요청 검증."""
 
 import json
 import unittest
 
 import httpx
 
-from app.clients.groq import GroqClient
+from app.clients.gemini import GeminiClient
 from app.config import Settings
 from app.schemas import Conditions
 from app.database.seed import DEFAULT_MENU_CATALOG
@@ -18,7 +18,7 @@ def completion(content):
     return {"choices": [{"finish_reason": "stop", "message": {"content": content}}]}
 
 
-class GroqContextTests(unittest.IsolatedAsyncioTestCase):
+class GeminiContextTests(unittest.IsolatedAsyncioTestCase):
     async def test_history_targets_and_pending_are_sent_as_data(self):
         requests = []
 
@@ -34,8 +34,8 @@ class GroqContextTests(unittest.IsolatedAsyncioTestCase):
                 })),
             )
 
-        client = GroqClient(
-            Settings(map_api_key="map", groq_api_key="groq"),
+        client = GeminiClient(
+            Settings(map_api_key="map", gemini_api_key="gemini"),
             transport=httpx.MockTransport(handler),
         )
         result = await client.interpret(
@@ -71,8 +71,8 @@ class GroqContextTests(unittest.IsolatedAsyncioTestCase):
                 json=completion(json.dumps({"intent": "reroll_menu", "condition_patch": {}})),
             )
 
-        client = GroqClient(
-            Settings(map_api_key="map", groq_api_key="groq"),
+        client = GeminiClient(
+            Settings(map_api_key="map", gemini_api_key="gemini"),
             transport=httpx.MockTransport(handler),
         )
         result = await client.interpret("다른 메뉴", Conditions(), 500, MENUS)

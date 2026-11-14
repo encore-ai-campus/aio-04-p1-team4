@@ -1,10 +1,10 @@
-"""실제 네트워크 없이 Groq 요청·오류·응답 검증을 검사합니다."""
+"""실제 네트워크 없이 Gemini 요청·오류·응답 검증을 검사합니다."""
 import json
 import unittest
 
 import httpx
 
-from app.clients.groq import GroqClient, GroqError
+from app.clients.gemini import GeminiClient, GeminiError
 from app.config import Settings
 from app.schemas import Conditions
 from app.database.seed import DEFAULT_MENU_CATALOG
@@ -20,23 +20,23 @@ def completion(content=None, finish="stop"):
     return {"choices":[{"finish_reason":finish,"message":{"content":content}}]}
 
 
-class GroqClientTests(unittest.IsolatedAsyncioTestCase):
+class GeminiClientTests(unittest.IsolatedAsyncioTestCase):
     def settings(self, **kwargs):
-        return Settings(map_api_key="fake-map", groq_api_key="fake-groq", **kwargs)
+        return Settings(map_api_key="fake-map", gemini_api_key="fake-gemini", **kwargs)
 
     async def invoke(self, handler, settings=None):
-        client = GroqClient(settings or self.settings(), transport=httpx.MockTransport(handler))
+        client = GeminiClient(settings or self.settings(), transport=httpx.MockTransport(handler))
         return await client.interpret("점심 추천", Conditions(), 500, MENUS)
 
     async def test_request_and_validated_response(self):
         def handler(request):
             body = json.loads(request.content)
-            self.assertEqual(request.headers["Authorization"], "Bearer fake-groq")
-            self.assertEqual(str(request.url), GroqClient.URL)
-            self.assertEqual(body["max_completion_tokens"], 1024)
+            self.assertEqual(request.headers["Authorization"], "Bearer fake-gemini")
+            self.assertEqual(str(request.url), GeminiClient.URL)
+            self.assertEqual(body["max_completion_tokens"], 2048)
             self.assertEqual(body["response_format"], {"type":"json_object"})
-            self.assertEqual(body["reasoning_effort"], "low")
-            self.assertFalse(body["include_reasoning"])
+            self.assertNotIn("reasoning_effort", body)
+            self.assertNotIn("include_reasoning", body)
             context = json.loads(body["messages"][1]["content"])
             self.assertNotIn("location", context)
             self.assertEqual(context["radius_m"], 500)
@@ -47,29 +47,29 @@ class GroqClientTests(unittest.IsolatedAsyncioTestCase):
         def handler(request):
             self.fail("키가 없으면 호출하면 안 됩니다.")
         settings = Settings(map_api_key="fake-map")
-        with self.assertRaises(GroqError) as error:
+        with self.assertRaises(GeminiError) as error:
             await self.invoke(handler, settings)
-        self.assertEqual(error.exception.code, "groq_config")
-        self.assertNotIn("fake-groq", repr(self.settings()))
+        self.assertEqual(error.exception.code, "gemini_config")
+        self.assertNotIn("fake-gemini", repr(self.settings()))
 
     async def test_status_errors_sanitized_without_retry(self):
-        for status, code in [(401,"groq_auth"),(403,"groq_permission"),(429,"groq_rate_limit"),
-                             (400,"groq_request"),(404,"groq_model"),(500,"groq_upstream"),(302,"groq_upstream")]:
+        for status, code in [(401,"gemini_auth"),(403,"gemini_permission"),(429,"gemini_rate_limit"),
+                             (400,"gemini_request"),(404,"gemini_model"),(500,"gemini_upstream"),(302,"gemini_upstream")]:
             calls = []
             def handler(request):
                 calls.append(request)
                 return httpx.Response(status, json={"error":"private-secret"})
-            with self.subTest(status=status), self.assertRaises(GroqError) as error:
+            with self.subTest(status=status), self.assertRaises(GeminiError) as error:
                 await self.invoke(handler)
             self.assertEqual(error.exception.code, code)
             self.assertNotIn("private-secret", str(error.exception))
             self.assertEqual(len(calls), 1)
 
     async def test_timeout_and_connection(self):
-        for kind, code in [(httpx.ReadTimeout,"groq_timeout"),(httpx.ConnectError,"groq_connection")]:
+        for kind, code in [(httpx.ReadTimeout,"gemini_timeout"),(httpx.ConnectError,"gemini_connection")]:
             def handler(request):
                 raise kind("private-secret", request=request)
-            with self.subTest(code=code), self.assertRaises(GroqError) as error:
+            with self.subTest(code=code), self.assertRaises(GeminiError) as error:
                 await self.invoke(handler)
             self.assertEqual(error.exception.code, code)
             self.assertNotIn("private-secret", str(error.exception))
@@ -96,12 +96,12 @@ class GroqClientTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(calls), 2)
 
         calls = []
-        with self.assertRaises(GroqError) as error:
+        with self.assertRaises(GeminiError) as error:
             await self.invoke(
                 lambda request: (
                     calls.append(request)
                     or httpx.Response(200, json=completion(finish="length"))
                 )
             )
-        self.assertEqual(error.exception.code, "groq_truncated")
+        self.assertEqual(error.exception.code, "gemini_truncated")
         self.assertEqual(len(calls), 1)

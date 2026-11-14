@@ -48,7 +48,7 @@ def test_ai_design_db_conversation_proposal_and_recovery(database, monkeypatch):
         assert server.started
         external=AsyncMock(side_effect=AssertionError('restaurant search forbidden'))
         # 5단계: 추가 설명 호출은 실제 API를 쓰지 않는다.
-        with patch('app.clients.groq.GroqClient.compose_answer',AsyncMock(side_effect=RuntimeError('narration_stub'))), patch('app.clients.groq.GroqClient.interpret',side_effect=interpret),patch('app.clients.kakao.KakaoClient.search_restaurants',external),sync_playwright() as p:
+        with patch('app.clients.gemini.GeminiClient.compose_answer',AsyncMock(side_effect=RuntimeError('narration_stub'))), patch('app.clients.gemini.GeminiClient.interpret',side_effect=interpret),patch('app.clients.kakao.KakaoClient.search_restaurants',external),sync_playwright() as p:
             browser=p.chromium.launch(headless=True)
             for label,size in [('desktop',{'width':1516,'height':1038}),('mobile',{'width':390,'height':844})]:
                 page=browser.new_page(viewport=size,reduced_motion='reduce')

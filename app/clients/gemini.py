@@ -1,4 +1,8 @@
-"""Groq 질문 해석과 5단계 답변 구성을 분리한 클라이언트."""
+"""Gemini 질문 해석과 5단계 답변 구성을 분리한 클라이언트.
+
+Google AI Studio의 OpenAI 호환 엔드포인트를 사용해 기존 OpenAI 형식의
+메시지·JSON 응답 계약을 그대로 유지한다.
+"""
 import asyncio
 from dataclasses import dataclass
 
@@ -11,7 +15,7 @@ from ..schemas import Conditions
 
 
 @dataclass
-class GroqError(Exception):
+class GeminiError(Exception):
     # 외부 응답 원문·질문·인증 헤더는 오류 객체에 저장하지 않습니다.
     code: str
     message: str
@@ -21,40 +25,43 @@ class GroqError(Exception):
         return self.message
 
 
-class GroqClient:
-    URL = "https://api.groq.com/openai/v1/chat/completions"
+class GeminiClient:
+    URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/openai/models"
 
     async def check_connection(self) -> dict:
         # 생성 토큰을 쓰지 않고 모델 목록 조회로 인증·설정 모델의 사용 가능 여부를 확인합니다.
-        key = self._settings.groq_api_key.get_secret_value().strip()
+        key = self._settings.gemini_api_key.get_secret_value().strip()
         if not key:
-            return dict(status="disconnected", code="groq_config", message="Groq API 키가 설정되지 않았습니다.")
+            return dict(status="disconnected", code="gemini_config", message="Gemini API 키가 설정되지 않았습니다.")
         try:
-            async with asyncio.timeout(self._settings.groq_timeout_seconds):
-                async with httpx.AsyncClient(timeout=self._settings.groq_timeout_seconds,
+            async with asyncio.timeout(self._settings.gemini_timeout_seconds):
+                async with httpx.AsyncClient(timeout=self._settings.gemini_timeout_seconds,
                                              follow_redirects=False, transport=self._transport) as client:
-                    response = await client.get("https://api.groq.com/openai/v1/models",
+                    response = await client.get(self.MODELS_URL,
                                                 headers={"Authorization": f"Bearer {key}"})
         except (TimeoutError, httpx.TimeoutException):
-            return dict(status="unknown", code="groq_timeout", message="연결 확인 시간이 초과되었습니다.")
+            return dict(status="unknown", code="gemini_timeout", message="연결 확인 시간이 초과되었습니다.")
         except httpx.RequestError:
-            return dict(status="unknown", code="groq_connection", message="Groq 네트워크 연결을 확인하지 못했습니다.")
+            return dict(status="unknown", code="gemini_connection", message="Gemini 네트워크 연결을 확인하지 못했습니다.")
         # 오류 원문이나 모델 전체 목록은 브라우저로 보내지 않습니다.
         if response.status_code in (401, 403):
-            return dict(status="disconnected", code="groq_auth" if response.status_code == 401 else "groq_permission",
-                        message="Groq 인증 키 또는 사용 권한을 확인해 주세요.")
+            return dict(status="disconnected", code="gemini_auth" if response.status_code == 401 else "gemini_permission",
+                        message="Gemini 인증 키 또는 사용 권한을 확인해 주세요.")
         if response.status_code != 200:
-            return dict(status="unknown", code="groq_rate_limit" if response.status_code == 429 else "groq_upstream",
+            return dict(status="unknown", code="gemini_rate_limit" if response.status_code == 429 else "gemini_upstream",
                         message="사용량 제한 또는 서비스 오류로 연결 상태를 확인하지 못했습니다.")
         try:
             data = response.json()["data"]
             if not isinstance(data, list) or any(not isinstance(m, dict) for m in data):
                 raise ValueError
-            available = any(m.get("id") == self._settings.groq_model and m.get("active") is True for m in data)
+            # OpenAI 호환 목록은 "models/gemini-..." 형태의 ID를 반환할 수 있다.
+            model_ids = {str(m.get("id", "")).removeprefix("models/") for m in data}
+            available = self._settings.gemini_model in model_ids
         except (ValueError, TypeError, KeyError):
-            return dict(status="unknown", code="groq_response", message="연결 확인 응답 형식이 올바르지 않습니다.")
+            return dict(status="unknown", code="gemini_response", message="연결 확인 응답 형식이 올바르지 않습니다.")
         if not available:
-            return dict(status="disconnected", code="groq_model", message="설정한 Groq 모델을 사용할 수 없습니다.")
+            return dict(status="disconnected", code="gemini_model", message="설정한 Gemini 모델을 사용할 수 없습니다.")
         return dict(status="connected", code="ok", message="인증과 설정 모델을 확인했습니다. 채팅 성공을 보장하는 검사는 아닙니다.")
 
     def __init__(self, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None):
@@ -77,9 +84,9 @@ class GroqClient:
     ) -> QuestionInterpretation:
         """최근 세션 문맥을 포함해 안전한 실행 계획 하나를 반환한다."""
 
-        key = self._settings.groq_api_key.get_secret_value().strip()
+        key = self._settings.gemini_api_key.get_secret_value().strip()
         if not key:
-            raise GroqError("groq_config", "Groq API 키가 설정되지 않았습니다. 서버 설정을 확인해 주세요.", 503)
+            raise GeminiError("gemini_config", "Gemini API 키가 설정되지 않았습니다. 서버 설정을 확인해 주세요.", 503)
         # 호출자가 잘못된 데이터를 주더라도 외부 요청 이전에 검사합니다.
         if not isinstance(message, str) or not 1 <= len(message.strip()) <= 500:
             raise ValueError("질문은 1~500자로 입력해 주세요.")
@@ -106,26 +113,23 @@ class GroqClient:
                 pending_action=pending_action,
             )
         except (OSError, ValueError, KeyError, TypeError):
-            raise GroqError("groq_policy", "질문 해석 지침 파일을 확인해 주세요.", 503) from None
-        body = {"model": self._settings.groq_model, "messages": messages,
-                "max_completion_tokens": self._settings.groq_max_completion_tokens,
+            raise GeminiError("gemini_policy", "질문 해석 지침 파일을 확인해 주세요.", 503) from None
+        body = {"model": self._settings.gemini_model, "messages": messages,
+                "max_completion_tokens": self._settings.gemini_max_completion_tokens,
                 "response_format": {"type": "json_object"}, "temperature": 0}
-        # GPT-OSS는 짧은 해석 작업에 낮은 추론 강도를 사용하고 추론 텍스트를 반환하지 않습니다.
-        if self._settings.groq_model.startswith("openai/gpt-oss-"):
-            body.update(reasoning_effort="low", include_reasoning=False)
         # 인증·한도·요청 오류는 형식 재요청 대상이 아니므로 즉시 안전한 오류로 반환한다.
         errors = {
-            401: ("groq_auth", "Groq API 키 인증에 실패했습니다. 서버 설정을 확인해 주세요.", 503),
-            403: ("groq_permission", "해당 Groq 모델의 사용 권한을 확인해 주세요.", 503),
-            429: ("groq_rate_limit", "AI 사용 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.", 503),
-            400: ("groq_request", "Groq 모델과 요청 옵션을 확인해 주세요.", 502),
-            404: ("groq_model", "Groq 모델 이름과 사용 가능 여부를 확인해 주세요.", 503),
+            401: ("gemini_auth", "Gemini API 키 인증에 실패했습니다. 서버 설정을 확인해 주세요.", 503),
+            403: ("gemini_permission", "해당 Gemini 모델의 사용 권한을 확인해 주세요.", 503),
+            429: ("gemini_rate_limit", "AI 사용 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.", 503),
+            400: ("gemini_request", "Gemini 모델과 요청 옵션을 확인해 주세요.", 502),
+            404: ("gemini_model", "Gemini 모델 이름과 사용 가능 여부를 확인해 주세요.", 503),
         }
         try:
             # 두 요청을 합친 전체 제한시간 안에서 형식 오류만 한 번 다시 요청한다.
-            async with asyncio.timeout(self._settings.groq_timeout_seconds):
+            async with asyncio.timeout(self._settings.gemini_timeout_seconds):
                 async with httpx.AsyncClient(
-                    timeout=self._settings.groq_timeout_seconds,
+                    timeout=self._settings.gemini_timeout_seconds,
                     follow_redirects=False,
                     transport=self._transport,
                 ) as client:
@@ -136,17 +140,17 @@ class GroqClient:
                             headers={"Authorization": f"Bearer {key}"},
                         )
                         if response.status_code in errors:
-                            raise GroqError(*errors[response.status_code])
+                            raise GeminiError(*errors[response.status_code])
                         if response.status_code != 200:
-                            raise GroqError(
-                                "groq_upstream", "AI 서비스가 정상 응답하지 않았습니다."
+                            raise GeminiError(
+                                "gemini_upstream", "AI 서비스가 정상 응답하지 않았습니다."
                             )
                         try:
                             data = response.json()
                             choice = data["choices"][0]
                             if choice.get("finish_reason") == "length":
-                                raise GroqError(
-                                    "groq_truncated",
+                                raise GeminiError(
+                                    "gemini_truncated",
                                     "AI 출력 한도에 도달해 응답이 잘렸습니다. 서버의 출력 토큰 설정을 확인해 주세요.",
                                 )
                             if choice.get("finish_reason") != "stop":
@@ -157,7 +161,7 @@ class GroqClient:
                             return parse_interpretation(
                                 result["content"], menu_ids, restaurant_ids
                             )
-                        except GroqError:
+                        except GeminiError:
                             raise
                         except (
                             ValidationError,
@@ -184,35 +188,33 @@ class GroqClient:
                             return QuestionInterpretation(
                                 intent="clarify", clarification_kind="ambiguous"
                             )
-        except GroqError:
+        except GeminiError:
             raise
         except (TimeoutError, httpx.TimeoutException):
-            raise GroqError(
-                "groq_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.", 504
+            raise GeminiError(
+                "gemini_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.", 504
             ) from None
         except httpx.RequestError:
-            raise GroqError(
-                "groq_connection", "AI 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", 503
+            raise GeminiError(
+                "gemini_connection", "AI 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", 503
             ) from None
 
     async def compose_answer(self, context: dict) -> dict:
         """5단계: 결과 설명을 한 번만 요청한다. 재시도 대신 상위 계층이 서버 답변을 쓴다."""
         from ..answer_narration import build_narration_messages
-        key=self._settings.groq_api_key.get_secret_value().strip()
-        if not key: raise GroqError('groq_config','답변 생성 키가 설정되지 않았습니다.',503)
-        body={'model':self._settings.groq_model,'messages':build_narration_messages(context),
-              'temperature':0,'max_completion_tokens':min(512,self._settings.groq_max_completion_tokens),
+        key=self._settings.gemini_api_key.get_secret_value().strip()
+        if not key: raise GeminiError('gemini_config','답변 생성 키가 설정되지 않았습니다.',503)
+        body={'model':self._settings.gemini_model,'messages':build_narration_messages(context),
+              'temperature':0,'max_completion_tokens':min(512,self._settings.gemini_max_completion_tokens),
               'response_format':{'type':'json_object'}}
-        if self._settings.groq_model.startswith('openai/gpt-oss-'):
-            body.update(reasoning_effort='low',include_reasoning=False)
         try:
-            async with asyncio.timeout(self._settings.groq_narration_timeout_seconds):
-                async with httpx.AsyncClient(timeout=self._settings.groq_narration_timeout_seconds,
+            async with asyncio.timeout(self._settings.gemini_narration_timeout_seconds):
+                async with httpx.AsyncClient(timeout=self._settings.gemini_narration_timeout_seconds,
                                              follow_redirects=False,transport=self._transport) as client:
                     response=await client.post(self.URL,json=body,headers={'Authorization':f'Bearer {key}'})
             if response.status_code!=200:
-                code={401:'groq_auth',403:'groq_permission',429:'groq_rate_limit',400:'groq_request',404:'groq_model'}.get(response.status_code,'groq_upstream')
-                raise GroqError(code,'답변 생성 요청을 완료하지 못했습니다.')
+                code={401:'gemini_auth',403:'gemini_permission',429:'gemini_rate_limit',400:'gemini_request',404:'gemini_model'}.get(response.status_code,'gemini_upstream')
+                raise GeminiError(code,'답변 생성 요청을 완료하지 못했습니다.')
             data=response.json()
             choice=data['choices'][0]
             if choice.get('finish_reason')!='stop' or choice['message'].get('tool_calls') or choice['message'].get('refusal'):
@@ -224,10 +226,10 @@ class GroqClient:
             usage={key:usage[key] for key in ('prompt_tokens','completion_tokens','total_tokens')
                    if type(usage.get(key)) is int and usage[key]>=0}
             return {'content':content,'usage':usage or None}
-        except GroqError: raise
+        except GeminiError: raise
         except (TimeoutError,httpx.TimeoutException):
-            raise GroqError('groq_timeout','답변 생성 시간이 초과되었습니다.',504) from None
+            raise GeminiError('gemini_timeout','답변 생성 시간이 초과되었습니다.',504) from None
         except httpx.RequestError:
-            raise GroqError('groq_connection','답변 생성 서비스에 연결하지 못했습니다.',503) from None
+            raise GeminiError('gemini_connection','답변 생성 서비스에 연결하지 못했습니다.',503) from None
         except (ValueError,TypeError,KeyError,IndexError,AttributeError):
-            raise GroqError('groq_response','답변 생성 형식이 올바르지 않습니다.') from None
+            raise GeminiError('gemini_response','답변 생성 형식이 올바르지 않습니다.') from None

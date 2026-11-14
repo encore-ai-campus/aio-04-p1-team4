@@ -1,11 +1,11 @@
-"""명시적으로 선택했을 때만 소량의 실제 Groq 사용량을 쓰는 해석 검사입니다."""
+"""명시적으로 선택했을 때만 소량의 실제 Gemini 사용량을 쓰는 해석 검사입니다."""
 import os
 import json
 import unittest
 from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
-from app.clients.groq import GroqClient
+from app.clients.gemini import GeminiClient
 from app.config import load_settings
 from app.schemas import Conditions
 from app.database.seed import DEFAULT_MENU_CATALOG
@@ -14,15 +14,15 @@ from app.main import app
 from app.rate_limit import InMemoryChatRateLimiter
 
 
-# 실제 Groq 검증도 운영의 삭제된 임시 배열이 아니라 DB 시드와 같은 목록을 사용한다.
+# 실제 Gemini 검증도 운영의 삭제된 임시 배열이 아니라 DB 시드와 같은 목록을 사용한다.
 MENUS = [dict(item) for item in DEFAULT_MENU_CATALOG]
 
 
-@unittest.skipUnless(os.environ.get("LUNCHRUN_LIVE_GROQ") == "1", "실제 API 검사는 별도로 활성화해야 합니다.")
+@unittest.skipUnless(os.environ.get("LUNCHRUN_LIVE_GEMINI") == "1", "실제 API 검사는 별도로 활성화해야 합니다.")
 class LiveGuardrailTests(unittest.IsolatedAsyncioTestCase):
     async def test_three_guardrail_cases(self):
         # 검색·위치 좌표 없이 질문 해석만 검사하며 키·원문 응답은 출력하지 않습니다.
-        client = GroqClient(load_settings())
+        client = GeminiClient(load_settings())
         cases = [
             ("반경 1km로 식당 찾아줘", "clarify", "radius"),
             ("땅콩 알레르기 없는 식당만 추천해줘", "clarify", "unsupported"),
@@ -37,7 +37,7 @@ class LiveGuardrailTests(unittest.IsolatedAsyncioTestCase):
 
 @unittest.skipUnless(
     os.environ.get("LUNCHRUN_LIVE_INTEGRATION") == "1",
-    "실제 Groq·카카오·상세페이지 검사는 별도로 활성화해야 합니다.",
+    "실제 Gemini·카카오·상세페이지 검사는 별도로 활성화해야 합니다.",
 )
 class LiveIntegrationTests(unittest.TestCase):
     """외부 사용량을 명시적으로 허용했을 때만 전체 스트림을 검증한다."""

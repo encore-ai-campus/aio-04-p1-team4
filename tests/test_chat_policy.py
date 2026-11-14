@@ -1,4 +1,4 @@
-"""Groq 호출 없이 계약과 예시를 검사합니다. 예시는 모델 정확도 검증 결과가 아닙니다."""
+"""Gemini 호출 없이 계약과 예시를 검사합니다. 예시는 모델 정확도 검증 결과가 아닙니다."""
 import json
 import unittest
 from pydantic import ValidationError

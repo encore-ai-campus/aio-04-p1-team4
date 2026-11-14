@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from app.main import app
 from app.clients.kakao import KakaoError
-from app.clients.groq import GroqError
+from app.clients.gemini import GeminiError
 from app.chat_policy import QuestionInterpretation
 from app.database import BusinessHours, Database, Menu, Restaurant
 
@@ -20,12 +20,12 @@ ITEM = {"id": "test-place", "name": "테스트 식당", "lat": 37.48, "lng": 126
 class RecommendationTests(unittest.TestCase):
     def setUp(self):
         # 서비스 경계에서 모의 처리하여 실제 키와 사용량을 소모하지 않습니다.
-        self.groq_patcher = patch("app.clients.groq.GroqClient.interpret", new_callable=AsyncMock)
-        # 5단계 추가 호출도 모의 처리하여 기존 회귀 테스트가 실제 Groq를 호출하지 않는다.
-        self.narration_patcher = patch('app.clients.groq.GroqClient.compose_answer',new_callable=AsyncMock)
+        self.gemini_patcher = patch("app.clients.gemini.GeminiClient.interpret", new_callable=AsyncMock)
+        # 5단계 추가 호출도 모의 처리하여 기존 회귀 테스트가 실제 Gemini를 호출하지 않는다.
+        self.narration_patcher = patch('app.clients.gemini.GeminiClient.compose_answer',new_callable=AsyncMock)
         self.narrate = self.narration_patcher.start()
-        self.narrate.side_effect = GroqError('groq_response','테스트 서버 답변 대체')
-        self.interpret = self.groq_patcher.start()
+        self.narrate.side_effect = GeminiError('gemini_response','테스트 서버 답변 대체')
+        self.interpret = self.gemini_patcher.start()
         self.interpret.return_value = QuestionInterpretation(intent="search_restaurants")
         # 추천 요청의 DB 저장도 프로젝트 실제 DB를 오염시키지 않고 검증합니다.
         self.original_database = app.state.database
@@ -55,7 +55,7 @@ class RecommendationTests(unittest.TestCase):
 
     def tearDown(self):
         self.narration_patcher.stop()
-        self.groq_patcher.stop()
+        self.gemini_patcher.stop()
         self.patcher.stop()
         self.collection_patcher.stop()
         self.client.close()
@@ -89,7 +89,7 @@ class RecommendationTests(unittest.TestCase):
         self.interpret.assert_not_awaited()
 
     def test_game_draw_respects_conditions_without_external_search(self):
-        # 메뉴 추첨만으로 카카오 검색·Playwright·Groq가 실행되면 안 된다.
+        # 메뉴 추첨만으로 카카오 검색·Playwright·Gemini가 실행되면 안 된다.
         response = self.client.post(
             "/api/menus/draw",
             json={"location": LOCATION, "radius_m": 500,
@@ -219,7 +219,7 @@ class RecommendationTests(unittest.TestCase):
         self.assertNotIn("맵기",text)
 
     def test_chat_missing_price_and_hours_have_exact_notices(self):
-        # 서버 답변까지 확인하며 외부 Groq와 카카오는 기존 테스트 모의 객체를 사용한다.
+        # 서버 답변까지 확인하며 외부 Gemini와 카카오는 기존 테스트 모의 객체를 사용한다.
         with self.test_database.session_factory.begin() as session:
             row=session.get(Restaurant,'test-place')
             row.menus[0].price=None
@@ -233,14 +233,14 @@ class RecommendationTests(unittest.TestCase):
         self.assertIsNone(data['result']['restaurants'][0]['price'])
         self.assertEqual(data['result']['restaurants'][0]['open_status'],'unknown')
 
-    def test_clarify_scope_and_groq_errors_never_search(self):
+    def test_clarify_scope_and_gemini_errors_never_search(self):
         for parsed in (QuestionInterpretation(intent="clarify",clarification="어떤 메뉴인가요?"),QuestionInterpretation(intent="out_of_scope")):
             self.interpret.return_value=parsed
             self.assertEqual(self.client.post("/api/chat",json={**BODY,"message":"질문"}).status_code,200)
-        self.interpret.side_effect=GroqError("groq_rate_limit","잠시 후 재시도",503)
+        self.interpret.side_effect=GeminiError("gemini_rate_limit","잠시 후 재시도",503)
         response=self.client.post("/api/chat",json={**BODY,"message":"추천"})
         self.assertEqual(response.status_code,503)
-        self.assertEqual(response.headers["X-Error-Code"],"groq_rate_limit")
+        self.assertEqual(response.headers["X-Error-Code"],"gemini_rate_limit")
         self.search.assert_not_awaited()
 
     def test_clarification_is_saved_as_pending_and_normal_request_clears_it(self):
@@ -522,8 +522,8 @@ class RecommendationTests(unittest.TestCase):
             app.state.active_chat_streams.discard(session_id)
 
     def test_chat_stream_returns_safe_failure_event(self):
-        self.interpret.side_effect = GroqError(
-            "groq_rate_limit", "잠시 후 다시 시도해 주세요.", 503
+        self.interpret.side_effect = GeminiError(
+            "gemini_rate_limit", "잠시 후 다시 시도해 주세요.", 503
         )
         with self.client.stream(
             "POST", "/api/chat/stream", json={**BODY, "message": "추천해줘"}
@@ -531,7 +531,7 @@ class RecommendationTests(unittest.TestCase):
             events = [json.loads(line) for line in response.iter_lines() if line]
         self.assertEqual(response.status_code, 200)
         self.assertEqual(events[-1]["event"], "failed")
-        self.assertEqual(events[-1]["code"], "groq_rate_limit")
+        self.assertEqual(events[-1]["code"], "gemini_rate_limit")
         self.search.assert_not_awaited()
 
     def test_changed_conditions_do_not_reuse_previous_restaurant_context(self):

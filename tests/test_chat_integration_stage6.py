@@ -1,4 +1,4 @@
-"""6단계 전체 흐름. 실제 Groq 검증만 별도 환경변수로 켜며 운영 DB는 사용하지 않는다."""
+"""6단계 전체 흐름. 실제 Gemini 검증만 별도 환경변수로 켜며 운영 DB는 사용하지 않는다."""
 import json
 import os
 from datetime import time
@@ -10,14 +10,14 @@ from app.chat_policy import QuestionInterpretation
 from app.database import Database, Restaurant, Menu, BusinessHours
 from app.chat_sessions import InMemoryChatSessionStore
 from app.rate_limit import InMemoryChatRateLimiter
-from app.clients.groq import GroqClient
+from app.clients.gemini import GeminiClient
 import test_recommendations as base
 
 
 @pytest.fixture
 def boundary(monkeypatch):
     case=base.RecommendationTests();case.setUp()
-    monkeypatch.setattr(app.state,'settings',app.state.settings.model_copy(update={'groq_narration_enabled':True}))
+    monkeypatch.setattr(app.state,'settings',app.state.settings.model_copy(update={'gemini_narration_enabled':True}))
     case.narrate.side_effect=lambda context:{'content':json.dumps({'paragraphs':[
         {'fact_ids':list(range(len(context['facts']))),'opening':'확인한 내용을 정리해드릴게요.'}
     ]},ensure_ascii=False)}
@@ -31,7 +31,7 @@ def ask(case,message,intent,**fields):
     response=case.client.post('/api/chat',json={**base.BODY,'menu_id':None,'message':message})
     assert response.status_code==200,response.text
     data=response.json()
-    assert data['answer_source']=='groq'
+    assert data['answer_source']=='gemini'
     return data
 
 
@@ -109,7 +109,7 @@ def test_food_description_is_fixed_notice_and_scope_message_is_exact(boundary):
     assert data['text']=='메뉴 선정 및 식당 선정에 관한 질문만 말씀해주세요.'
 
 
-@pytest.mark.skipif(os.environ.get('LUNCHRUN_LIVE_STAGE6')!='1',reason='실제 Groq는 별도 선택 시에만 최대 6회 호출한다.')
+@pytest.mark.skipif(os.environ.get('LUNCHRUN_LIVE_STAGE6')!='1',reason='실제 Gemini는 별도 선택 시에만 최대 6회 호출한다.')
 def test_live_three_turns_with_six_http_request_ceiling(tmp_path,monkeypatch):
     # 실제 외부 모델 + 임시 식당 DB의 결합만 확인한다. 카카오나 운영 DB에는 접근하지 않는다.
     db=Database(f"sqlite:///{(tmp_path/'live_stage6.db').as_posix()}")
@@ -130,13 +130,13 @@ def test_live_three_turns_with_six_http_request_ceiling(tmp_path,monkeypatch):
                 response=await transport.handle_async_request(request)
                 await response.aread()
                 return response
-    settings=app.state.settings.model_copy(update={'groq_narration_enabled':True})
-    real=GroqClient(settings,transport=LimitedTransport())
+    settings=app.state.settings.model_copy(update={'gemini_narration_enabled':True})
+    real=GeminiClient(settings,transport=LimitedTransport())
     monkeypatch.setattr(app.state,'database',db)
     monkeypatch.setattr(app.state,'settings',settings)
     monkeypatch.setattr(app.state,'chat_sessions',InMemoryChatSessionStore())
     monkeypatch.setattr(app.state,'chat_rate_limiter',InMemoryChatRateLimiter(100,1000))
-    monkeypatch.setattr('app.api.GroqClient',lambda _settings:real)
+    monkeypatch.setattr('app.api.GeminiClient',lambda _settings:real)
     summary=[]
     try:
         with TestClient(app) as client:
@@ -145,7 +145,7 @@ def test_live_three_turns_with_six_http_request_ceiling(tmp_path,monkeypatch):
                 assert response.status_code==200,f'live turn {index+1}: HTTP {response.status_code}'
                 data=response.json()
                 summary.append({'turn':index+1,'answer_source':data['answer_source'],'narration':data['narration']})
-                assert data['answer_source']=='groq',f'live turn {index+1}: {data.get("narration",{}).get("reason")}'
+                assert data['answer_source']=='gemini',f'live turn {index+1}: {data.get("narration",{}).get("reason")}'
                 if index==0: assert data['result']['menu']['id']=='noodle'
                 if index==1: assert data['result']['restaurants'][0]['price']==8000
                 if index==2: assert data['restaurant_detail']['price']==8000

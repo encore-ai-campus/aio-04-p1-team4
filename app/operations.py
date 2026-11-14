@@ -31,7 +31,7 @@ def readiness_report(database: Database, settings: Settings) -> tuple[dict, int]
         "menu_catalog_count": 0,
         "playwright_chromium": False,
         "kakao_configured": bool(settings.map_api_key.get_secret_value()),
-        "groq_configured": bool(settings.groq_api_key.get_secret_value()),
+        "gemini_configured": bool(settings.gemini_api_key.get_secret_value()),
     }
     try:
         with database.session_factory() as session:
@@ -53,7 +53,7 @@ def readiness_report(database: Database, settings: Settings) -> tuple[dict, int]
         checks["database"],
         checks["menu_catalog"],
         checks["kakao_configured"],
-        checks["groq_configured"],
+        checks["gemini_configured"],
     ]
     ready = all(value is True for value in required)
     return {

@@ -1,4 +1,4 @@
-"""Groq 의도를 DB 메뉴 선정·식당 검색·검증된 후속 답변에 연결합니다."""
+"""Gemini 의도를 DB 메뉴 선정·식당 검색·검증된 후속 답변에 연결합니다."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 from .chat_sessions import ChatSessionState, DisplayedRestaurant
 from .schemas import Conditions, SelectedLocation
 from .clients.kakao import KakaoClient
-from .clients.groq import GroqClient, GroqError
+from .clients.gemini import GeminiClient, GeminiError
 from .chat_policy import load_replies
 from .database import Database, MenuCatalog, Restaurant
 from .food_types import catalog_food_type
@@ -32,7 +32,7 @@ async def _emit(
 
 
 def _active_catalogs(session: Session) -> list[MenuCatalog]:
-    """Groq와 서버가 같은 활성 메뉴 목록을 사용하도록 DB에서 한 번에 읽는다."""
+    """Gemini와 서버가 같은 활성 메뉴 목록을 사용하도록 DB에서 한 번에 읽는다."""
 
     return list(
         session.scalars(
@@ -45,7 +45,7 @@ def _active_catalogs(session: Session) -> list[MenuCatalog]:
 
 
 def _catalog_payload(catalog: MenuCatalog) -> dict:
-    """Groq에는 식별 정보만, 서버 응답에는 검증 가능한 카탈로그 설명을 사용한다."""
+    """Gemini에는 식별 정보만, 서버 응답에는 검증 가능한 카탈로그 설명을 사용한다."""
 
     return {
         "id": catalog.id,
@@ -219,7 +219,7 @@ def _displayed_target(message, state, model_id):
 
 
 async def chat(message: str, conditions: Conditions, menu_id: str | None, location: SelectedLocation,
-               radius_m: int, client: KakaoClient, groq: GroqClient,
+               radius_m: int, client: KakaoClient, gemini: GeminiClient,
                session: Session | None = None,
                database: Database | None = None,
                conversation_state: ChatSessionState | None = None,
@@ -258,7 +258,7 @@ async def chat(message: str, conditions: Conditions, menu_id: str | None, locati
         recent_places = [{'id':item.restaurant_id, 'name':item.name}
                          for item in conversation_state.displayed_restaurants]
     await _emit(progress, "interpreting", "질문을 이해하고 있어요.")
-    parsed = await groq.interpret(
+    parsed = await gemini.interpret(
         message,
         conditions,
         radius_m,
@@ -278,7 +278,7 @@ async def chat(message: str, conditions: Conditions, menu_id: str | None, locati
     try:
         replies = load_replies()
     except (OSError, ValueError, TypeError):
-        raise GroqError("groq_policy", "답변 안내문 설정을 확인해 주세요.", 503) from None
+        raise GeminiError("gemini_policy", "답변 안내문 설정을 확인해 주세요.", 503) from None
     response = dict(text="", suggested_patch=None, result=None)
     session_meta = {"intent": parsed.intent, "clear_pending": True}
     if parsed.intent == "explain_recommendation":

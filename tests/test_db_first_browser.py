@@ -47,7 +47,7 @@ def test_db_home_game_map_and_back(database, tmp_path, monkeypatch):
         external = AsyncMock(side_effect=AssertionError('external restaurant lookup forbidden'))
         interpretation = AsyncMock(return_value=QuestionInterpretation(intent='recommend_menu'))
         # 5단계: 추가 설명 호출은 실제 API를 쓰지 않는다.
-        with patch('app.clients.groq.GroqClient.compose_answer',AsyncMock(side_effect=RuntimeError('narration_stub'))), patch('app.clients.kakao.KakaoClient.search_restaurants', external), patch('app.clients.groq.GroqClient.interpret', interpretation), sync_playwright() as p:
+        with patch('app.clients.gemini.GeminiClient.compose_answer',AsyncMock(side_effect=RuntimeError('narration_stub'))), patch('app.clients.kakao.KakaoClient.search_restaurants', external), patch('app.clients.gemini.GeminiClient.interpret', interpretation), sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(reduced_motion='reduce', viewport={'width':1440,'height':1000})
             errors = []

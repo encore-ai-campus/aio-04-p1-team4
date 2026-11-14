@@ -169,7 +169,7 @@ class ChatSessionState(BaseModel):
         if clear_pending:
             self.pending_action = None
         if pending_action is not None:
-            # Groq 원문이 아니라 서버가 만든 제한된 pending 구조만 저장한다.
+            # 모델 원문이 아니라 서버가 만든 제한된 pending 구조만 저장한다.
             self.pending_action = PendingAction.model_validate(pending_action)
 
         self.turns.append(
@@ -178,7 +178,7 @@ class ChatSessionState(BaseModel):
                 assistant_message=assistant_message,
             )
         )
-        # 질문과 답변 한 쌍을 한 턴으로 보고 최신 10턴만 Groq 문맥 후보로 남긴다.
+        # 질문과 답변 한 쌍을 한 턴으로 보고 최신 10턴만 모델 문맥 후보로 남긴다.
         self.turns = self.turns[-MAX_CHAT_TURNS:]
         self.version += 1
 

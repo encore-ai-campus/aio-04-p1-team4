@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from . import services
 from .clients.kakao import KakaoClient, KakaoError
-from .clients.groq import GroqClient, GroqError
+from .clients.gemini import GeminiClient, GeminiError
 from .chat_sessions import SESSION_COOKIE_NAME, new_session_id, valid_session_id
 from .database import MenuCatalog, get_db
 from .operations import readiness_report
@@ -61,21 +61,21 @@ async def _enforce_chat_rate_limit(request: Request, session_id: str) -> None:
         )
 
 
-@router.get("/groq/status")
-async def groq_status(request: Request, refresh: bool = False):
+@router.get("/gemini/status")
+async def gemini_status(request: Request, refresh: bool = False):
     # 서버 내 단일 진행 요청과 60초 캐시를 공유합니다. 수동 확인도 최소 5초 간격입니다.
     state = request.app.state
-    if not hasattr(state, "groq_status_lock"):
-        state.groq_status_lock = asyncio.Lock()
-    async with state.groq_status_lock:
-        cache = getattr(state, "groq_status_cache", None)
+    if not hasattr(state, "gemini_status_lock"):
+        state.gemini_status_lock = asyncio.Lock()
+    async with state.gemini_status_lock:
+        cache = getattr(state, "gemini_status_cache", None)
         ttl = 5 if refresh else 60
         if cache and cache[0] == state.settings and monotonic() - cache[1] < ttl:
             result = {**cache[2], "cached": True}
         else:
-            result = await GroqClient(state.settings).check_connection()
+            result = await GeminiClient(state.settings).check_connection()
             result.update(checked_at=datetime.now(timezone.utc).isoformat(), cached=False)
-            state.groq_status_cache = (state.settings, monotonic(), result.copy())
+            state.gemini_status_cache = (state.settings, monotonic(), result.copy())
     # 브라우저·프록시 캐시 대신 위 서버 캐시만 사용하고 확인 시각을 함께 전달합니다.
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
@@ -188,7 +188,7 @@ async def _record_chat_result(
     old_state=await request.app.state.chat_sessions.get(session_id)
     await narrate_response(result,message=body.message.strip(),conditions=body.conditions,
         radius_m=body.radius_m,location=body.location,state=old_state,
-        groq=GroqClient(request.app.state.settings),enabled=request.app.state.settings.groq_narration_enabled,
+        gemini=GeminiClient(request.app.state.settings),enabled=request.app.state.settings.gemini_narration_enabled,
         progress=progress)
     session_meta = result.pop("_session", {})
     # 4단계: 요청 당시 값 대신 서버가 실제 적용한 조건을 일반·스트림에 동일하게 기록한다.
@@ -227,7 +227,7 @@ async def chat(body: ChatRequest, request: Request, response: Response,
     try:
         result = await services.chat(
             body.message.strip(), body.conditions, body.menu_id, body.location,
-            body.radius_m, client, GroqClient(request.app.state.settings), session,
+            body.radius_m, client, GeminiClient(request.app.state.settings), session,
             request.app.state.database, conversation_state,
             detail_success_ttl_hours=(
                 request.app.state.settings.detail_success_ttl_hours
@@ -236,7 +236,7 @@ async def chat(body: ChatRequest, request: Request, response: Response,
                 request.app.state.settings.detail_failure_retry_minutes
             ),
         )
-    except (KakaoError, GroqError) as error:
+    except (KakaoError, GeminiError) as error:
         # 외부 오류 원문이나 키는 공개하지 않고 진단 코드만 헤더에 포함합니다.
         logger.warning(
             "chat_external_error",
@@ -283,7 +283,7 @@ async def chat_stream(
                 body.location,
                 body.radius_m,
                 client,
-                GroqClient(request.app.state.settings),
+                GeminiClient(request.app.state.settings),
                 session,
                 request.app.state.database,
                 conversation_state,
@@ -303,7 +303,7 @@ async def chat_stream(
                     "data": final,
                 }
             )
-        except (KakaoError, GroqError) as error:
+        except (KakaoError, GeminiError) as error:
             logger.warning(
                 "chat_stream_external_error",
                 extra={"event": "chat_stream_failed", "error_code": error.code},

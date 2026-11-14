@@ -141,7 +141,7 @@ def test_existing_create_all_database_can_be_stamped_without_data_loss(tmp_path:
 def test_readiness_checks_database_catalog_browser_and_configuration(tmp_path: Path):
     database = Database(f"sqlite:///{(tmp_path / 'ready.db').as_posix()}")
     database.init_schema()
-    settings = Settings(map_api_key="kakao", groq_api_key="groq")
+    settings = Settings(map_api_key="kakao", gemini_api_key="gemini")
     try:
         with patch("app.operations._playwright_browser_available", return_value=True):
             report, status = readiness_report(database, settings)

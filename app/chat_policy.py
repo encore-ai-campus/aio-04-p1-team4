@@ -1,4 +1,4 @@
-"""4단계: 대화 문맥을 포함한 Groq 실행 계획과 가드레일 계약."""
+"""4단계: 대화 문맥을 포함한 Gemini 실행 계획과 가드레일 계약."""
 
 from __future__ import annotations
 
@@ -39,12 +39,12 @@ class ConditionPatch(BaseModel):
     minutes: int | None = Field(default=None, ge=10, le=120)
     budget: int | None = Field(default=None, ge=1000, le=100000)
     cuisine: FoodType | None = None
-    # Groq도 삭제된 채식·맵기 조건 변경을 제안할 수 없다.
+    # Gemini도 삭제된 채식·맵기 조건 변경을 제안할 수 없다.
     radius_m: int | None = Field(default=None, ge=50, le=500)
 
 
 class QuestionInterpretation(BaseModel):
-    """Groq가 제안할 수 있는 실행 계획. 실제 식당 사실은 포함하지 않는다."""
+    """Gemini가 제안할 수 있는 실행 계획. 실제 식당 사실은 포함하지 않는다."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
     intent: Literal[
@@ -145,7 +145,7 @@ def parse_interpretation(raw: str, menu_ids: set[str],
 
 
 def _history(value: list[dict] | None) -> list[dict[str, str]]:
-    """Groq에는 검증 가능한 문자열의 최신 10턴만 데이터로 전달한다."""
+    """Gemini에는 검증 가능한 문자열의 최신 10턴만 데이터로 전달한다."""
 
     result: list[dict[str, str]] = []
     for item in (value or [])[-10:]:
@@ -159,7 +159,7 @@ def _history(value: list[dict] | None) -> list[dict[str, str]]:
 
 
 def _places(value: list[dict] | None) -> list[dict[str, str]]:
-    """식당 사실 대신 대상 식별에 필요한 ID와 이름만 Groq에 전달한다."""
+    """식당 사실 대신 대상 식별에 필요한 ID와 이름만 Gemini에 전달한다."""
 
     result: list[dict[str, str]] = []
     for item in (value or [])[:15]:

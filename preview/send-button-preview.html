@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>전송 버튼 시안 v3 (실제 적용 스타일)</title>
+<link rel="stylesheet" href="../frontend/styles.css">
+<link rel="stylesheet" href="../frontend/chat.css">
+<link rel="stylesheet" href="../frontend/ai-integration.css">
+<style>
+  body { margin: 0; padding: 32px 16px; background: #f6f4ef; font-family: inherit; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h2 { font-size: 15px; color: #607188; margin: 36px 0 10px; }
+  .note { font-size: 12px; color: #999; margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<div class="app" data-view="ai">
+<div class="wrap">
+
+<h2>데스크톱 폭 — 실제 적용 마크업과 동일</h2>
+<div class="lr-chat">
+  <p class="lr-chat-context">출발 위치: 독산역</p>
+  <div class="lr-chat-log ai-chat">
+    <p class="lr-chat-empty chat-welcome">✦ AI : 안녕하세요. 원하는 점심 메뉴나 조건을 알려주세요.</p>
+    <div class="lr-chat-message"><small>✦ AI</small><p>점심 메뉴를 추천해드릴게요. 어떤 조건이 있으신가요?</p></div>
+    <div class="lr-chat-message lr-chat-user"><small>게스트</small><p>5000원 이하로 짜장면 추천해줘</p></div>
+  </div>
+  <p class="lr-chat-status" role="status"></p>
+  <form class="lr-chat-form">
+    <label class="lr-chat-label ai-input-label" for="ai-message">원하는 점심 조건</label>
+    <div class="ai-compose lr-chat-compose"><textarea id="ai-message" name="message" rows="2" maxlength="500" placeholder="질문을 입력해주세요"></textarea><button type="button" class="lr-chat-send" aria-label="질문 보내기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 10l-4 4 4 4"/><path d="M5 14h9a5 5 0 0 0 5-5V5"/></svg></button></div>
+    <div class="lr-chat-actions">
+      <button type="button" class="primary">식당경로 확인</button>
+    </div>
+  </form>
+</div>
+<p class="note">입력창 크기는 그대로. 버튼은 우측 끝에 높이 가운데 정렬. 클릭 시 Enter와 동일하게 전송됩니다.</p>
+
+<h2>모바일 폭 (360px)</h2>
+<div style="max-width:360px">
+<div class="lr-chat">
+  <p class="lr-chat-context">출발 위치: 독산역</p>
+  <div class="lr-chat-log ai-chat">
+    <p class="lr-chat-empty chat-welcome">✦ AI : 안녕하세요.</p>
+  </div>
+  <p class="lr-chat-status" role="status"></p>
+  <form class="lr-chat-form">
+    <label class="lr-chat-label ai-input-label">원하는 점심 조건</label>
+    <div class="ai-compose lr-chat-compose"><textarea rows="2" maxlength="500" placeholder="질문을 입력해주세요"></textarea><button type="button" class="lr-chat-send" aria-label="질문 보내기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 10l-4 4 4 4"/><path d="M5 14h9a5 5 0 0 0 5-5V5"/></svg></button></div>
+    <div class="lr-chat-actions">
+      <button type="button" class="primary">식당경로 확인</button>
+    </div>
+  </form>
+</div>
+</div>
+
+<h2>글자가 길 때 — 버튼에 가려지지 않는지</h2>
+<div class="lr-chat">
+  <div class="ai-compose lr-chat-compose"><textarea rows="2" maxlength="500">김치찌개나 설렁탕처럼 따뜻한 국물 요리로 점심 추천해주실 수 있을까요?</textarea><button type="button" class="lr-chat-send" aria-label="질문 보내기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 10l-4 4 4 4"/><path d="M5 14h9a5 5 0 0 0 5-5V5"/></svg></button></div>
+</div>
+<p class="note">오른쪽 안쪽 여백(46px) 덕분에 긴 문장도 버튼 뒤로 들어가지 않습니다.</p>
+
+</div>
+</div>
+</body>
+</html>

@@ -4,35 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "02c90f5bb594e619",
+        "id": "735abae5f1f622de",
         "type": "tabs",
         "children": [
           {
-            "id": "8fcfedbc77dba8c1",
+            "id": "d15e7739f3f55cc5",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "BACKEND_DB_GUIDE.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "BACKEND_DB_GUIDE"
-            }
-          },
-          {
-            "id": "7f182f288f572b70",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "README.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "README"
+              "title": "새 탭"
             }
           }
         ]
@@ -77,8 +59,24 @@
               "icon": "lucide-bookmark",
               "title": "북마크"
             }
+          },
+          {
+            "id": "28793688aef1a01c",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "파일 탐색기"
+            }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "horizontal",
@@ -187,21 +185,36 @@
       "bases:새 베이스 생성하기": false
     }
   },
-  "active": "8fcfedbc77dba8c1",
+  "active": "d15e7739f3f55cc5",
   "lastOpenFiles": [
-    "docs/random_game_flow_v1.md",
-    "data/lunchrun.db-shm",
-    "data/lunchrun.db-wal",
-    "kakao-map/walk_routes.py",
-    "kakao-map/styles.css",
-    "kakao-map/serve.py",
-    "kakao-map/routes.js",
-    "kakao-map/pj.code-workspace",
-    "kakao-map/pin-overlaps.js",
-    "kakao-map/nearby-search.js",
-    "kakao-map/nearby-data.js",
+    "docs/README.md",
+    "docs/API_DESIGN_v1.md",
+    "docs/대시보드_구현결과물_LUNCHRUN.pdf",
+    "docs/화면설계서_LUNCHRUN.pdf",
+    "docs/대시보드 설계서_LUNCHRUN.pdf",
+    "docs/DB설계서_LUNCHRUN.pdf",
+    "docs/API 설계서_LUNCHRUN.pdf",
     "README.md",
+    "README_conf.md",
+    "README_demo.md",
+    "tmp/pdfs/last-page.png",
+    "tmp/pdfs/delivered-contact.png",
+    "tmp/pdfs/delivered-9.png",
+    "tmp/pdfs/delivered-8.png",
+    "tmp/pdfs/delivered-7.png",
+    "tmp/pdfs/delivered-6.png",
+    "tmp/pdfs/delivered-5.png",
+    "tmp/pdfs/delivered-4.png",
+    "tmp/pdfs/delivered-3.png",
+    "tmp/pdfs/delivered-2.png",
+    "tmp/pdfs/compact-dashboard.cjs",
+    "docs/DASHBOARD_LUNCHRUN.pdf",
+    "tmp/pdfs/DASHBOARD_LUNCHRUN.html",
+    "tmp/pdfs/build-dashboard.cjs",
+    "docs/assets/readme",
+    "docs/CURRENT_GUIDE_v1.md",
     "BACKEND_DB_GUIDE.md",
+    "docs/random_game_flow_v1.md",
     "docs_old/README.md",
     "docs_old/docs/step5_db_chat_verification_v1.md",
     "docs_old/docs/step4_groq_guardrail_verification_v1.md",
